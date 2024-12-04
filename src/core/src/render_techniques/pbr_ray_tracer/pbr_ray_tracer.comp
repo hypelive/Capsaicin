@@ -1,0 +1,31 @@
+uint2 g_BufferDimensions;
+RayCamera g_RayCamera;
+uint g_BounceCount;
+uint g_BounceRRCount;
+uint g_SampleCount;
+uint g_Accumulate;
+
+uint g_FrameIndex;
+
+StructuredBuffer<Instance> g_InstanceBuffer;
+StructuredBuffer<Mesh> g_MeshBuffer;
+StructuredBuffer<float3x4> g_TransformBuffer;
+StructuredBuffer<uint> g_IndexBuffer;
+StructuredBuffer<Vertex> g_VertexBuffer;
+StructuredBuffer<Material> g_MaterialBuffer;
+
+RWTexture2D<float4> g_AccumulationBuffer;
+RWTexture2D<float4> g_OutputBuffer;
+
+RaytracingAccelerationStructure g_Scene;
+
+TextureCube g_EnvironmentBuffer;
+Texture2D g_TextureMaps[] : register(space99);
+
+SamplerState g_TextureSampler; // Should be a linear sampler
+
+[numthreads(4, 8, 1)]
+void ReferencePT(in uint2 did : SV_DispatchThreadID)
+{
+    g_OutputBuffer[did] = float4(1.0f, 1.0f, 0.0f, 1.0f);
+}
