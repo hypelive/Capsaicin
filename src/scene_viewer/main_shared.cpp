@@ -827,7 +827,7 @@ bool CapsaicinMain::renderFrame() noexcept
         return false;
     }
 
-    // Get events
+    // Get events, sample input.
     gfxWindowPumpEvents(window);
 
     if (!benchmarkMode)
@@ -901,6 +901,8 @@ bool CapsaicinMain::renderFrame() noexcept
                     acceleration2.x -= force2 * ImGui::GetMouseDragDelta(0, 0.0F).x;
                     acceleration2.y += force2 * ImGui::GetMouseDragDelta(0, 0.0F).y;
                 }
+                // Why 0.5 frame time?
+                // Probably, some engines apply input over time, and scaling by a coefficient like 0.5 can help normalize the effect across different frame rates or simulate inertia.
                 cameraRotation += acceleration2 * 0.5F * frameTime;
                 cameraRotation = glm::clamp(cameraRotation, -4e-2F, 4e-2F);
                 // Clamp tiny values to zero to improve convergence to resting state
