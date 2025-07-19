@@ -903,6 +903,7 @@ bool CapsaicinMain::renderFrame() noexcept
                 }
                 // Why 0.5 frame time?
                 // Probably, some engines apply input over time, and scaling by a coefficient like 0.5 can help normalize the effect across different frame rates or simulate inertia.
+                // Or it's from general equation of linearly accelerated movement d = d0 + v0 * t + 0.5 * a * t^2.
                 cameraRotation += acceleration2 * 0.5F * frameTime;
                 cameraRotation = glm::clamp(cameraRotation, -4e-2F, 4e-2F);
                 // Clamp tiny values to zero to improve convergence to resting state
@@ -949,6 +950,8 @@ bool CapsaicinMain::renderFrame() noexcept
                         // Prevent view and up direction becoming parallel (this uses an FPS style camera)
                         vec3 const newRight = normalize(cross(forward, vec3(0.0F, 1.0F, 0.0F)));
                         up                  = normalize(cross(newRight, forward));
+                        // Is it ok that we can have not orthonormalized frame in this case?
+                        // The app actually have bugs because of this.
                     }
 
                     Capsaicin::SetSceneCameraView(position, forward, up);
