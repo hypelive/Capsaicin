@@ -877,17 +877,19 @@ void CapsaicinInternal::render()
                 {
                     if (i.first != "ColorScaled")
                     {
+                        // Render size textures scale.
                         i.second = resizeRenderTexture(i.second);
                     }
                     else
                     {
+                        // Display size textures scale.
                         i.second = resizeWindowTexture(i.second);
                     }
                 }
             }
         }
 
-        // Update the scene state
+        // Update the scene state, i.e. simulation.
         updateScene();
 
         // Update the components

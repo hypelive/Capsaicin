@@ -754,6 +754,7 @@ void CapsaicinInternal::updateSceneCameraMatrices() noexcept
         }
         else
         {
+            // TODO read it.
             // Use Separating Axis Theorem to check if the new view frustum does not overlap the old one
             // Get the frustum plane normals
             auto const viewProjection     = glm::mat4x3(transpose(glm::mat4(projection) * glm::mat4(view)));
@@ -856,6 +857,7 @@ void CapsaicinInternal::updateSceneCameraMatrices() noexcept
         CalculateHaltonNumber((jitter_index % jitter_phase_count_) + 1, 3));
     camera_jitter_ =
         ((camera_jitter_ - 0.5F) * float2(2.0F, -2.0F)) / static_cast<float2>(render_dimensions_);
+    // TODO continue here.
     for (uint32_t i = 0; i < 2; ++i)
     {
         if (i > 0)
