@@ -502,6 +502,7 @@ bool CapsaicinInternal::generateEnvironmentMap(std::filesystem::path const &file
     uint32_t const maxWidth        = std::max(render_dimensions_.x, render_dimensions_.y);
     uint32_t const floorWidth      = std::bit_floor(maxWidth);
     uint32_t const ceilWidth       = std::bit_ceil(maxWidth);
+    // Round up to the nearest power of two.
     uint32_t       environmentSize = (maxWidth - floorWidth >= ceilWidth - maxWidth) ? ceilWidth : floorWidth;
 
     if (environment_map_file_ == fileName)
@@ -577,6 +578,7 @@ bool CapsaicinInternal::generateEnvironmentMap(std::filesystem::path const &file
         glm::dvec3(0.0, 1.0, 0.0), glm::dvec3(0.0, -1.0, 0.0), glm::dvec3(0.0, 0.0, -1.0),
         glm::dvec3(0.0, 0.0, 1.0)};
 
+    // Why up directions are negative in y? Probably because of Vulkan's NDC has inverted y axis.
     constexpr std::array up_vectors = {glm::dvec3(0.0, -1.0, 0.0), glm::dvec3(0.0, -1.0, 0.0),
         glm::dvec3(0.0, 0.0, -1.0), glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(0.0, -1.0, 0.0),
 
@@ -681,6 +683,7 @@ void CapsaicinInternal::updateScene() noexcept
         prev_vertex_data_index_ = vertex_data_index_;
         if (animation_updated_)
         {
+            // Double buffering vertex data.
             vertex_data_index_ = vertex_data_index_ ^ 1;
 
             if (frame_index_ == 0)
@@ -857,7 +860,6 @@ void CapsaicinInternal::updateSceneCameraMatrices() noexcept
         CalculateHaltonNumber((jitter_index % jitter_phase_count_) + 1, 3));
     camera_jitter_ =
         ((camera_jitter_ - 0.5F) * float2(2.0F, -2.0F)) / static_cast<float2>(render_dimensions_);
-    // TODO continue here.
     for (uint32_t i = 0; i < 2; ++i)
     {
         if (i > 0)

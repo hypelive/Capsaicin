@@ -745,6 +745,7 @@ GfxTexture CapsaicinInternal::resizeWindowTexture(
 GfxProgram CapsaicinInternal::createProgram(char const *file_name) const noexcept
 {
     auto const  shaderPaths      = getShaderPaths();
+    // New include paths can be added here.
     char const *include_paths[3] = {shaderPaths[0].c_str(), shaderPaths[1].c_str(), shaderPaths[2].c_str()};
     return gfxCreateProgram(gfx_, file_name, shader_path_.c_str(), nullptr, include_paths, 3U);
 }
