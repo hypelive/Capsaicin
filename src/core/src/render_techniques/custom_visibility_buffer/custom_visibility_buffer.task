@@ -1,0 +1,13 @@
+#include "custom_visibility_buffer_shared.h"
+
+#include "math/transform.hlsl"
+#include "math/pack.hlsl"
+
+[NumThreads(1, 1, 1)]
+void main(uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID)
+{
+    MeshPayload meshPayload;
+    meshPayload.trash = 0;
+
+    DispatchMesh(1, 1, 1, meshPayload);
+}

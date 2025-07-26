@@ -1,0 +1,19 @@
+#include "custom_visibility_buffer_shared.h"
+
+[NumThreads(1, 1, 1)]
+[OutputTopology("triangle")]
+void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPayload meshPayload,
+    out indices uint3 tris[1], out vertices VertexParams verts[3]
+)
+{
+    // Set the actual number of vertices and primitives.
+    SetMeshOutputCounts(3, 1);
+
+    tris[0] = uint3(0, 1, 2);
+    for (uint i = 0; i < 3; ++i)
+    {
+        VertexParams vertex;
+        vertex.position = 1.0f - float4(4.0f * (i & 1), 4.0f * (i >> 1), 1.0f, 0.0f);
+        verts[i] = vertex;
+    }
+}

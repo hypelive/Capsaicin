@@ -241,10 +241,6 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
         gfxProgramSetParameter(
             gfx_, visibility_buffer_program_, "g_PrevVertexDataIndex", capsaicin.getPrevVertexDataIndex());
         gfxProgramSetParameter(
-            gfx_, visibility_buffer_program_, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
-        gfxProgramSetParameter(
-            gfx_, visibility_buffer_program_, "g_TransformBuffer", capsaicin.getTransformBuffer());
-        gfxProgramSetParameter(
             gfx_, visibility_buffer_program_, "g_PrevTransformBuffer", capsaicin.getPrevTransformBuffer());
 
         gfxProgramSetParameter(
