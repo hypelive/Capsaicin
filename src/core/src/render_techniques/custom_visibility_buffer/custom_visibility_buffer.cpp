@@ -80,7 +80,7 @@ bool CustomVisibilityBuffer::init([[maybe_unused]] CapsaicinInternal const &caps
     m_visibility_buffer_program = capsaicin.createProgram("render_techniques/custom_visibility_buffer/custom_visibility_buffer");
 
     GfxDrawState const visibility_buffer_draw_state = {};
-    gfxDrawStateSetCullMode(visibility_buffer_draw_state, D3D12_CULL_MODE_FRONT);
+    gfxDrawStateSetCullMode(visibility_buffer_draw_state, D3D12_CULL_MODE_BACK);
     gfxDrawStateSetDepthFunction(visibility_buffer_draw_state, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
@@ -99,6 +99,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
     // Prepare draw data.
     {
         std::vector<DrawData> drawData;
+#if 1
         for (auto const &index : capsaicin.getInstanceIdData())
         {
             Instance const &instance = capsaicin.getInstanceData()[index];
@@ -108,6 +109,14 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
                 drawData.emplace_back(instance.meshlet_offset_idx + j, index);
             }
         }
+#else // Draw the first instance only.
+        uint32_t instanceId = capsaicin.getInstanceIdData()[0];
+        Instance const &instance   = capsaicin.getInstanceData()[instanceId];
+        for (uint32_t j = 0; j < instance.meshlet_count; ++j)
+        {
+            drawData.emplace_back(instance.meshlet_offset_idx + j, instanceId);
+        }
+#endif
         m_draw_data_size = static_cast<uint32_t>(drawData.size());
         gfxDestroyBuffer(gfx_, m_draw_data_buffer);
         // The data will be uploaded through the staging buffer (it seems), so we don't need to worry about requesting cpu access to the buffer.
@@ -138,6 +147,9 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 
     // Run the amplification shader.
     {
+        gfxCommandClearTexture(gfx_, capsaicin.getSharedTexture("Depth"));
+        gfxCommandClearTexture(gfx_, capsaicin.getSharedTexture("Color"));
+
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("Color"));
         gfxCommandBindKernel(gfx_, m_visibility_buffer_kernel);

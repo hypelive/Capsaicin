@@ -3,7 +3,6 @@
 #include "math/transform.hlsl"
 
 StructuredBuffer<DrawConstants> g_DrawConstants;
-StructuredBuffer<DrawData> g_DrawDataBuffer;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<float3x4> g_TransformBuffer;
 StructuredBuffer<Meshlet> g_MeshletBuffer;
@@ -20,8 +19,8 @@ uint g_VertexDataIndex;
 void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPayload meshPayload,
     out indices uint3 tris[NUM_TRIS], out vertices VertexParams verts[NUM_VERTS], out primitives PrimParams prims[NUM_TRIS])
 {
-    const uint meshletIndex = meshPayload.meshletIndex[gtid];
-    const uint instanceIndex = meshPayload.instanceIndex[gtid];
+    const uint meshletIndex = meshPayload.meshletIndex[gid];
+    const uint instanceIndex = meshPayload.instanceIndex[gid];
     Meshlet meshlet = g_MeshletBuffer[meshletIndex];
     Instance instance = g_InstanceBuffer[instanceIndex];
 
