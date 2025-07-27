@@ -10,12 +10,25 @@ struct VertexParams
     float4 position : SV_Position;
 };
 
+struct PrimParams
+{
+    uint instanceID : INSTANCE_ID;
+};
+
+#define MESH_GROUP_SIZE 32
 struct MeshPayload
 {
-    uint trash;
+    uint meshletIndex[MESH_GROUP_SIZE];
+    uint instanceIndex[MESH_GROUP_SIZE];
 };
 
 #endif
+
+struct DrawConstants
+{
+    float4x4 viewProjection;
+    uint drawCount;
+};
 
 struct DrawData
 {

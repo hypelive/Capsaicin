@@ -3,11 +3,28 @@
 #include "math/transform.hlsl"
 #include "math/pack.hlsl"
 
-[NumThreads(1, 1, 1)]
-void main(uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID)
-{
-    MeshPayload meshPayload;
-    meshPayload.trash = 0;
+StructuredBuffer<DrawConstants> g_DrawConstants;
+StructuredBuffer<DrawData> g_DrawDataBuffer;
+StructuredBuffer<Instance> g_InstanceBuffer;
+StructuredBuffer<float3x4> g_TransformBuffer;
 
-    DispatchMesh(1, 1, 1, meshPayload);
+groupshared MeshPayload meshPayload;
+
+#define AMPLIFICATION_GROUP_SIZE 32
+
+[NumThreads(AMPLIFICATION_GROUP_SIZE, 1, 1)]
+void main(uint dtid : SV_DispatchThreadID, uint gtid : SV_GroupThreadID)
+{
+    float visible = false;
+    if (dtid < g_DrawConstants[0].drawCount)
+    {
+        DrawData drawData = g_DrawDataBuffer[dtid];
+        meshPayload.meshletIndex[gtid] = drawData.meshletIndex;
+        meshPayload.instanceIndex[gtid] = drawData.instanceIndex;
+
+        visible = true;
+    }
+
+    uint visibleCount = WaveActiveCountBits(visible);   
+    DispatchMesh(visibleCount, 1, 1, meshPayload);
 }

@@ -1,19 +1,61 @@
 #include "custom_visibility_buffer_shared.h"
 
-[NumThreads(1, 1, 1)]
+#include "math/transform.hlsl"
+
+StructuredBuffer<DrawConstants> g_DrawConstants;
+StructuredBuffer<DrawData> g_DrawDataBuffer;
+StructuredBuffer<Instance> g_InstanceBuffer;
+StructuredBuffer<float3x4> g_TransformBuffer;
+StructuredBuffer<Meshlet> g_MeshletBuffer;
+StructuredBuffer<uint> g_MeshletPackBuffer;
+StructuredBuffer<Vertex> g_VertexBuffer;
+// We have multiple index data sets for the animations.
+uint g_VertexDataIndex;
+
+#define NUM_TRIS 64
+#define NUM_VERTS 64
+
+[NumThreads(NUM_TRIS, 1, 1)]
 [OutputTopology("triangle")]
 void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPayload meshPayload,
-    out indices uint3 tris[1], out vertices VertexParams verts[3]
-)
+    out indices uint3 tris[NUM_TRIS], out vertices VertexParams verts[NUM_VERTS], out primitives PrimParams prims[NUM_TRIS])
 {
-    // Set the actual number of vertices and primitives.
-    SetMeshOutputCounts(3, 1);
+    const uint meshletIndex = meshPayload.meshletIndex[gtid];
+    const uint instanceIndex = meshPayload.instanceIndex[gtid];
+    Meshlet meshlet = g_MeshletBuffer[meshletIndex];
+    Instance instance = g_InstanceBuffer[instanceIndex];
 
-    tris[0] = uint3(0, 1, 2);
-    for (uint i = 0; i < 3; ++i)
+    uint vertexCount = meshlet.vertex_count;
+    uint triangleCount = meshlet.triangle_count;
+
+    // Set the actual number of vertices and primitives.
+    SetMeshOutputCounts(vertexCount, triangleCount);
+
+    uint dataIndex = meshlet.data_offset_idx + gtid;
+    float3x4 transform = g_TransformBuffer[instance.transform_index];
+
+    if (gtid < vertexCount)
     {
-        VertexParams vertex;
-        vertex.position = 1.0f - float4(4.0f * (i & 1), 4.0f * (i >> 1), 1.0f, 0.0f);
-        verts[i] = vertex;
+        uint vertexOffset = g_MeshletPackBuffer[dataIndex];
+        uint vertexIndex = vertexOffset + instance.vertex_offset_idx[g_VertexDataIndex];
+        Vertex vertex = g_VertexBuffer[vertexIndex];
+
+        float3 position = transformPoint(vertex.getPosition(), transform);
+
+        VertexParams vertexParams;
+        vertexParams.position = mul(g_DrawConstants[0].viewProjection, float4(position, 1.0f));
+
+        verts[gtid] = vertexParams;
+    }
+
+    if (gtid < triangleCount)
+    {
+        uint indiceIndex = dataIndex + vertexCount;
+
+        uint packedIndices = g_MeshletPackBuffer[indiceIndex];
+        uint3 unpackedIndices = uint3(packedIndices & 0x3F, (packedIndices >> 10) & 0x3F, packedIndices >> 20);
+        tris[gtid] = unpackedIndices;
+
+        prims[gtid].instanceID = meshletIndex;
     }
 }
