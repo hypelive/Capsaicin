@@ -82,6 +82,9 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     {          .name                 = "Sponza",
      .fileName          = {"assets/CapsaicinTestMedia/sponza/Sponza.gltf"},
      .useEnvironmentMap = true},
+    {          .name                 = "Minecraft",
+     .fileName          = {"assets/CapsaicinTestMedia/minecraft/vokselia_spawn.obj"},
+     .useEnvironmentMap = true}
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {

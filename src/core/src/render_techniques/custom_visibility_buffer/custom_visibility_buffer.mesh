@@ -40,9 +40,11 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         Vertex vertex = g_VertexBuffer[vertexIndex];
 
         float3 position = transformPoint(vertex.getPosition(), transform);
+        float3 normal = transformNormal(vertex.getNormal(), transform);
 
         VertexParams vertexParams;
         vertexParams.position = mul(g_DrawConstants[0].viewProjection, float4(position, 1.0f));
+        vertexParams.normal = normal;
 
         verts[gtid] = vertexParams;
     }

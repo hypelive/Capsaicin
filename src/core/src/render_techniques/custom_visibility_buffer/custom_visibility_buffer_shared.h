@@ -8,6 +8,7 @@
 struct VertexParams
 {
     float4 position : SV_Position;
+    float3 normal : NORMAL;
 };
 
 struct PrimParams
