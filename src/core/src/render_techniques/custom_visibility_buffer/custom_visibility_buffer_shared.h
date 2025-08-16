@@ -7,8 +7,9 @@
 
 struct VertexParams
 {
-    float4 position : SV_Position;
+    float4 screenPosition : SV_Position;
     float3 normal : NORMAL;
+    float3 worldPosition : POSITION0;
 };
 
 struct PrimParams
@@ -28,6 +29,7 @@ struct MeshPayload
 struct DrawConstants
 {
     float4x4 viewProjection;
+    float3   cameraPosition; 
     uint drawCount;
 };
 

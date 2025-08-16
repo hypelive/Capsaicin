@@ -127,6 +127,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
     {
         DrawConstants drawConstants = {};
         drawConstants.viewProjection = capsaicin.getCameraMatrices().view_projection;
+        drawConstants.cameraPosition = capsaicin.getCamera().eye;
         drawConstants.drawCount      = m_draw_data_size;
 
         gfxDestroyBuffer(gfx_, m_draw_constants_buffer);
@@ -169,6 +170,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MeshletPackBuffer",capsaicin.getSharedBuffer("MeshletPack"));
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexBuffer", capsaicin.getVertexBuffer());
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
+        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
     }
 
     // Run the amplification shader.

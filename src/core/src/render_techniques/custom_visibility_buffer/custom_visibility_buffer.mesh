@@ -39,11 +39,12 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         uint vertexIndex = vertexOffset + instance.vertex_offset_idx[g_VertexDataIndex];
         Vertex vertex = g_VertexBuffer[vertexIndex];
 
-        float3 position = transformPoint(vertex.getPosition(), transform);
+        float3 worldPosition = transformPoint(vertex.getPosition(), transform);
         float3 normal = transformNormal(vertex.getNormal(), transform);
 
         VertexParams vertexParams;
-        vertexParams.position = mul(g_DrawConstants[0].viewProjection, float4(position, 1.0f));
+        vertexParams.screenPosition = mul(g_DrawConstants[0].viewProjection, float4(worldPosition, 1.0f));
+        vertexParams.worldPosition = worldPosition;
         vertexParams.normal = normal;
 
         verts[gtid] = vertexParams;
