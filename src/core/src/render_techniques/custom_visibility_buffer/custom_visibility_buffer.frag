@@ -1,4 +1,8 @@
 #include "custom_visibility_buffer_shared.h"
+#include "lights/lights.hlsl"
+
+StructuredBuffer<uint> g_LightsCountBuffer;
+StructuredBuffer<Light> g_LightsBuffer;
 
 struct Pixel
 {
@@ -21,10 +25,17 @@ float3 ambient(float3 normal)
 
 float3 lambert(float3 normal)
 {
-    const float3 lightDirection = normalize(float3(1.0f, 1.0f, 1.0f));
-    const float C_LIGHT_RADIANCE = 1.0f;
+    const uint lightsCount = g_LightsCountBuffer[0];
+    if (lightsCount == 0)
+    {
+        return float3(0.0f, 0.0f, 0.0f);
+    }
 
-    return max(0.0f, dot(normal, lightDirection)) * C_LIGHT_RADIANCE;
+    const LightDirectional directionalLight = MakeLightDirectional(g_LightsBuffer[0]);
+    const float3 lightDirection = directionalLight.direction;
+    const float3 irradiance = directionalLight.irradiance;
+
+    return max(0.0f, dot(normal, lightDirection)) * irradiance;
 }
 
 float3 tonemap(float3 radiance)

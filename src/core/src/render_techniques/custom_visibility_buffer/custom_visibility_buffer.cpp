@@ -133,10 +133,36 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         m_draw_constants_buffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
     }
 
+    // Initialize directional light data.
+    // TODO move it to a separate component.
+    {
+        const uint32_t lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
+        const auto* const lights = gfxSceneGetLights(capsaicin.getScene());
+
+        gfxDestroyBuffer(gfx_, m_lights_count_buffer);
+        m_lights_count_buffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
+
+        if (lightsCount > 0)
+        {
+            auto &firstLight = lights[0];
+            if (firstLight.type == kGfxLightType_Directional)
+            {
+                const Light directionalLight = MakeDirectionalLight(firstLight.color * firstLight.intensity,
+                    normalize(firstLight.direction), std::numeric_limits<float>::max());
+
+                gfxDestroyBuffer(gfx_, m_lights_buffer);
+                m_lights_buffer = gfxCreateBuffer<Light>(gfx_, 1, &directionalLight);
+            }
+        }
+    }
+
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_DrawConstants", m_draw_constants_buffer);
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_DrawDataBuffer", m_draw_data_buffer);
+        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LightsCountBuffer", m_lights_count_buffer);
+        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LightsBuffer", m_lights_buffer);
+
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_TransformBuffer", capsaicin.getTransformBuffer());
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MeshletBuffer", capsaicin.getSharedBuffer("Meshlets"));

@@ -87,6 +87,8 @@ private:
     GfxKernel m_visibility_buffer_kernel;
     GfxBuffer m_draw_data_buffer;
     GfxBuffer m_draw_constants_buffer;
+    GfxBuffer m_lights_count_buffer;
+    GfxBuffer m_lights_buffer;
     uint32_t m_draw_data_size = 0u;
 };
 } // namespace Capsaicin
