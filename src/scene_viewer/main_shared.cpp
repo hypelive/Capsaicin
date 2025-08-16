@@ -84,7 +84,10 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
      .useEnvironmentMap = true},
     {          .name                 = "Minecraft",
      .fileName          = {"assets/CapsaicinTestMedia/minecraft/vokselia_spawn.obj"},
-     .useEnvironmentMap = true}
+     .useEnvironmentMap = true},
+    {          .name                 = "RoughnessMetallicSpheres",
+     .fileName          = {"assets/CapsaicinTestMedia/RoughnessMetallicSpheres/RoughnessMetallicSpheres.glb"},
+     .useEnvironmentMap = false},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {
