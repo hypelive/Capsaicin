@@ -171,6 +171,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexBuffer", capsaicin.getVertexBuffer());
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
         gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
+
+        auto const &textures = capsaicin.getTextures();
+        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_TextureMaps", textures.data(), static_cast<uint32_t>(textures.size()));
+        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LinearSampler", capsaicin.getLinearSampler());
     }
 
     // Run the amplification shader.

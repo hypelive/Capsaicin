@@ -2,6 +2,11 @@
 #include "lights/lights.hlsl"
 #include "math/math_constants.hlsl"
 
+Texture2D g_TextureMaps[] : register(space99);
+SamplerState g_TextureSampler;
+
+#include "materials/materials.hlsl"
+
 StructuredBuffer<DrawConstants> g_DrawConstants;
 StructuredBuffer<uint> g_LightsCountBuffer;
 StructuredBuffer<Light> g_LightsBuffer;
@@ -66,11 +71,11 @@ float calculateSmithGeometry(float NdotV, float NdotL, float alpha)
 }
 
 // https://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
-float3 directionalPBR(Material material, float3 normal, float3 viewDirection)
+float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDirection)
 {
-    const float3 albedo = material.albedo.rgb;
-    const float metallic = material.metallicity_roughness.x;
-    const float roughness = material.metallicity_roughness.z;
+    const float3 albedo = material.albedo;
+    const float metallic = material.metallicity;
+    const float roughness = material.roughness;
     const float alpha = roughness * roughness;
 
     const uint lightsCount = g_LightsCountBuffer[0];
@@ -97,7 +102,7 @@ float3 directionalPBR(Material material, float3 normal, float3 viewDirection)
     const float3 specular = (Fresnel * NDF * G) / 4.0f;
     const float3 diffuse = (1.0f - Fresnel) * albedo / PI;
 
-    return (specular + diffuse) * NdotL * irradiance;
+    return (specular + diffuse) * max(0.0f, NdotL) * irradiance;
 }
 
 Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
@@ -108,14 +113,19 @@ Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
 
     Instance instance = g_InstanceBuffer[instanceID];
     Material material = g_MaterialBuffer[instance.material_index];
+    MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, params.uv);
 
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
-    float3 radiance = directionalPBR(material, normal, viewDirection) + ambient(normal);
+    float3 radiance = directionalPBR(materialEvaluated, normal, viewDirection) + ambient(normal);
 
+#if 0
+    float3 color = radiance;
+#else
     float3 color = tonemap(radiance);
     color = applyInverseGamma(color);
+#endif
 
     pixel.color = float4(color, 1.0f);
     return pixel;

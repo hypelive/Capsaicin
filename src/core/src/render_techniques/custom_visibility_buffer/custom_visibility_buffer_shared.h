@@ -9,6 +9,7 @@ struct VertexParams
 {
     float4 screenPosition : SV_Position;
     float3 normal : NORMAL;
+    float2 uv : TEXCOORD;
     float3 worldPosition : POSITION0;
 };
 
