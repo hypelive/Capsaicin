@@ -163,9 +163,9 @@ protected:
      */
     static void fileDropCallback(char const *filePath, uint32_t index, void *data) noexcept;
 
-    static constexpr auto defaultScene          = "Flying World";
+    static constexpr auto defaultScene          = "RoughnessMetallicSpheres";
     static constexpr auto defaultEnvironmentMap = "Kiara Dawn";
-    static constexpr auto defaultRenderer       = "GI-1.1";
+    static constexpr auto defaultRenderer       = "Custom Renderer";
 
     GfxWindow  window;                              /**< Gfx window class */
     GfxContext contextGFX;                          /**< Gfx context */

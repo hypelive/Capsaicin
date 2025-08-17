@@ -87,7 +87,7 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
      .useEnvironmentMap = true},
     {          .name                 = "RoughnessMetallicSpheres",
      .fileName          = {"assets/CapsaicinTestMedia/RoughnessMetallicSpheres/RoughnessMetallicSpheres.glb"},
-     .useEnvironmentMap = false},
+     .useEnvironmentMap = true},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {
