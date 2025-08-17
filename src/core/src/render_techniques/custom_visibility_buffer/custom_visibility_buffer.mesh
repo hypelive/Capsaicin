@@ -58,6 +58,6 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         uint3 unpackedIndices = uint3(packedIndices & 0x3F, (packedIndices >> 10) & 0x3F, packedIndices >> 20);
         tris[gtid] = unpackedIndices;
 
-        prims[gtid].instanceID = meshletIndex;
+        prims[gtid].instanceID = instanceIndex;
     }
 }
