@@ -83,8 +83,8 @@ public:
 private:
     RenderOptions    options;
 
-    GfxProgram m_skybox_program;
-    GfxKernel m_skybox_kernel;
-    GfxBuffer m_draw_constants_buffer;
+    GfxProgram m_skyboxProgram;
+    GfxKernel m_skyboxKernel;
+    GfxBuffer m_drawConstantsBuffer;
 };
 } // namespace Capsaicin

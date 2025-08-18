@@ -1,25 +1,3 @@
-/**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-********************************************************************/
-
 #include "custom_visibility_buffer.h"
 #include "capsaicin_internal.h"
 #include "custom_visibility_buffer_shared.h"
@@ -77,21 +55,21 @@ DebugViewList CustomVisibilityBuffer::getDebugViews() const noexcept
 
 bool CustomVisibilityBuffer::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
 {
-    m_visibility_buffer_program = capsaicin.createProgram("render_techniques/custom_visibility_buffer/custom_visibility_buffer");
+    m_visibilityBufferProgram = capsaicin.createProgram("render_techniques/custom_visibility_buffer/custom_visibility_buffer");
 
-    GfxDrawState const visibility_buffer_draw_state = {};
-    gfxDrawStateSetCullMode(visibility_buffer_draw_state, D3D12_CULL_MODE_BACK);
-    gfxDrawStateSetDepthFunction(visibility_buffer_draw_state, D3D12_COMPARISON_FUNC_GREATER);
+    GfxDrawState const visibilityBufferDrawState = {};
+    gfxDrawStateSetCullMode(visibilityBufferDrawState, D3D12_CULL_MODE_BACK);
+    gfxDrawStateSetDepthFunction(visibilityBufferDrawState, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
-        visibility_buffer_draw_state, 0, capsaicin.getSharedTexture("Color").getFormat());
+        visibilityBufferDrawState, 0, capsaicin.getSharedTexture("Color").getFormat());
     gfxDrawStateSetDepthStencilTarget(
-        visibility_buffer_draw_state, capsaicin.getSharedTexture("Depth").getFormat());
+        visibilityBufferDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
-    m_visibility_buffer_kernel =
-        gfxCreateMeshKernel(gfx_, m_visibility_buffer_program, visibility_buffer_draw_state);
+    m_visibilityBufferKernel =
+        gfxCreateMeshKernel(gfx_, m_visibilityBufferProgram, visibilityBufferDrawState);
 
-    return m_visibility_buffer_program;
+    return m_visibilityBufferProgram;
 }
 
 void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
@@ -117,10 +95,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
             drawData.emplace_back(instance.meshlet_offset_idx + j, instanceId);
         }
 #endif
-        m_draw_data_size = static_cast<uint32_t>(drawData.size());
-        gfxDestroyBuffer(gfx_, m_draw_data_buffer);
+        m_drawDataSize = static_cast<uint32_t>(drawData.size());
+        gfxDestroyBuffer(gfx_, m_drawDataBuffer);
         // The data will be uploaded through the staging buffer (it seems), so we don't need to worry about requesting cpu access to the buffer.
-        m_draw_data_buffer = gfxCreateBuffer<DrawData>(gfx_, m_draw_data_size, drawData.data());
+        m_drawDataBuffer = gfxCreateBuffer<DrawData>(gfx_, m_drawDataSize, drawData.data());
     }
 
     // Filling the draw constants.
@@ -128,10 +106,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         DrawConstants drawConstants = {};
         drawConstants.viewProjection = capsaicin.getCameraMatrices().view_projection;
         drawConstants.cameraPosition = capsaicin.getCamera().eye;
-        drawConstants.drawCount      = m_draw_data_size;
+        drawConstants.drawCount      = m_drawDataSize;
 
-        gfxDestroyBuffer(gfx_, m_draw_constants_buffer);
-        m_draw_constants_buffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
+        gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
+        m_drawConstantsBuffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
     }
 
     // Initialize directional light data.
@@ -140,8 +118,8 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         const uint32_t lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
         const auto* const lights = gfxSceneGetLights(capsaicin.getScene());
 
-        gfxDestroyBuffer(gfx_, m_lights_count_buffer);
-        m_lights_count_buffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
+        gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
+        m_lightsCountBuffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
 
         if (lightsCount > 0)
         {
@@ -151,30 +129,30 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
                 const Light directionalLight = MakeDirectionalLight(firstLight.color * firstLight.intensity,
                     normalize(firstLight.direction), std::numeric_limits<float>::max());
 
-                gfxDestroyBuffer(gfx_, m_lights_buffer);
-                m_lights_buffer = gfxCreateBuffer<Light>(gfx_, 1, &directionalLight);
+                gfxDestroyBuffer(gfx_, m_lightsBuffer);
+                m_lightsBuffer = gfxCreateBuffer<Light>(gfx_, 1, &directionalLight);
             }
         }
     }
 
     // Set the root parameters.
     {
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_DrawConstants", m_draw_constants_buffer);
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_DrawDataBuffer", m_draw_data_buffer);
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LightsCountBuffer", m_lights_count_buffer);
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LightsBuffer", m_lights_buffer);
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_DrawConstants", m_drawConstantsBuffer);
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_DrawDataBuffer", m_drawDataBuffer);
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsCountBuffer", m_lightsCountBuffer);
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsBuffer", m_lightsBuffer);
 
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_TransformBuffer", capsaicin.getTransformBuffer());
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MeshletBuffer", capsaicin.getSharedBuffer("Meshlets"));
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MeshletPackBuffer",capsaicin.getSharedBuffer("MeshletPack"));
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexBuffer", capsaicin.getVertexBuffer());
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletBuffer", capsaicin.getSharedBuffer("Meshlets"));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletPackBuffer",capsaicin.getSharedBuffer("MeshletPack"));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexBuffer", capsaicin.getVertexBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
 
         auto const &textures = capsaicin.getTextures();
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_TextureMaps", textures.data(), static_cast<uint32_t>(textures.size()));
-        gfxProgramSetParameter(gfx_, m_visibility_buffer_program, "g_LinearSampler", capsaicin.getLinearSampler());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(), static_cast<uint32_t>(textures.size()));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler", capsaicin.getLinearSampler());
     }
 
     // Run the amplification shader.
@@ -184,10 +162,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("Color"));
-        gfxCommandBindKernel(gfx_, m_visibility_buffer_kernel);
+        gfxCommandBindKernel(gfx_, m_visibilityBufferKernel);
 
-        uint32_t const* num_threads  = gfxKernelGetNumThreads(gfx_, m_visibility_buffer_kernel);
-        uint32_t const  num_groups_x = (m_draw_data_size + num_threads[0] - 1) / num_threads[0];
+        uint32_t const* num_threads  = gfxKernelGetNumThreads(gfx_, m_visibilityBufferKernel);
+        uint32_t const  num_groups_x = (m_drawDataSize + num_threads[0] - 1) / num_threads[0];
 
         gfxCommandDrawMesh(gfx_, num_groups_x, 1, 1);
     }
@@ -195,7 +173,12 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 
 void CustomVisibilityBuffer::terminate() noexcept
 {
-    // TODO Destroy Resources.
+    gfxDestroyKernel(gfx_, m_visibilityBufferKernel);
+    gfxDestroyProgram(gfx_, m_visibilityBufferProgram);
+    gfxDestroyBuffer(gfx_, m_lightsBuffer);
+    gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
+    gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
+    gfxDestroyBuffer(gfx_, m_drawDataBuffer);
 }
 
 void CustomVisibilityBuffer::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }

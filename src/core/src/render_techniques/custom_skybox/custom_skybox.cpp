@@ -1,25 +1,3 @@
-/**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-********************************************************************/
-
 #include "custom_skybox.h"
 #include "capsaicin_internal.h"
 #include "custom_skybox_shared.h"
@@ -75,20 +53,20 @@ DebugViewList CustomSkybox::getDebugViews() const noexcept
 
 bool CustomSkybox::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
 {
-    m_skybox_program = capsaicin.createProgram("render_techniques/custom_skybox/custom_skybox");
+    m_skyboxProgram = capsaicin.createProgram("render_techniques/custom_skybox/custom_skybox");
 
-    GfxDrawState const skybox_draw_state = {};
-    gfxDrawStateSetCullMode(skybox_draw_state, D3D12_CULL_MODE_BACK);
-    gfxDrawStateSetDepthFunction(skybox_draw_state, D3D12_COMPARISON_FUNC_GREATER);
+    GfxDrawState const skyboxDrawState = {};
+    gfxDrawStateSetCullMode(skyboxDrawState, D3D12_CULL_MODE_BACK);
+    gfxDrawStateSetDepthFunction(skyboxDrawState, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
-        skybox_draw_state, 0, capsaicin.getSharedTexture("Color").getFormat());
+        skyboxDrawState, 0, capsaicin.getSharedTexture("Color").getFormat());
     gfxDrawStateSetDepthStencilTarget(
-        skybox_draw_state, capsaicin.getSharedTexture("Depth").getFormat());
+        skyboxDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
-    m_skybox_kernel = gfxCreateGraphicsKernel(gfx_, m_skybox_program, skybox_draw_state);
+    m_skyboxKernel = gfxCreateGraphicsKernel(gfx_, m_skyboxProgram, skyboxDrawState);
 
-    return m_skybox_kernel;
+    return m_skyboxKernel;
 }
 
 void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
@@ -102,23 +80,23 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
         drawConstants.cameraPosition = capsaicin.getCamera().eye;
         drawConstants.invScreenSize = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
-        gfxDestroyBuffer(gfx_, m_draw_constants_buffer);
-        m_draw_constants_buffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
+        gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
+        m_drawConstantsBuffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
     }
 
     // Set the root parameters.
     {
-        gfxProgramSetParameter(gfx_, m_skybox_program, "g_DrawConstants", m_draw_constants_buffer);
-        gfxProgramSetParameter(gfx_, m_skybox_program, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", m_drawConstantsBuffer);
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
 
-        gfxProgramSetParameter(gfx_, m_skybox_program, "g_LinearSampler", capsaicin.getLinearSampler());
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_LinearSampler", capsaicin.getLinearSampler());
     }
 
     // Run full screen triangle.
     {
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandBindColorTarget(gfx_, 0, colorTexture);
-        gfxCommandBindKernel(gfx_, m_skybox_kernel);
+        gfxCommandBindKernel(gfx_, m_skyboxKernel);
 
         gfxCommandDraw(gfx_, 3);
     }
@@ -126,7 +104,9 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
 
 void CustomSkybox::terminate() noexcept
 {
-    // TODO Destroy Resources.
+    gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
+    gfxDestroyKernel(gfx_, m_skyboxKernel);
+    gfxDestroyProgram(gfx_, m_skyboxProgram);
 }
 
 void CustomSkybox::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }
