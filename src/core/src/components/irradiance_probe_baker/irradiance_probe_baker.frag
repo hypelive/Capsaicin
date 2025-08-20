@@ -20,7 +20,7 @@ Pixel main(in VertexParams params)
     float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
 
     // Translate point from near plane (we have inversed depth) to the world space.
-    float4 worldPosition = mul(g_DrawConstants[g_FaceIndex].invViewProjection, float4(ndc, 1.0f, 1.0f));
+    float4 worldPosition = mul(g_DrawConstants[g_FaceIndex], float4(ndc, 1.0f, 1.0f));
     worldPosition.xyz /= worldPosition.w;
     const float3 viewDirection = normalize(worldPosition.xyz);
     
