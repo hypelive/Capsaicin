@@ -1,9 +1,10 @@
 #include "irradiance_probe_baker_shared.h"
 #include "math/math.hlsl"
 
-StructuredBuffer<DrawConstants> g_DrawConstants;
+StructuredBuffer<float4x4> g_DrawConstants;
 TextureCube g_EnvironmentMap;
 SamplerState g_LinearSampler;
+float2 g_invScreenSize;
 uint g_FaceIndex;
 
 struct Pixel
@@ -15,7 +16,7 @@ Pixel main(in VertexParams params)
 {
     Pixel pixel;
 
-    float2 uv = params.screenPosition.xy * g_DrawConstants[g_FaceIndex].invScreenSize;
+    float2 uv = params.screenPosition.xy * g_invScreenSize;
     float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
 
     // Translate point from near plane (we have inversed depth) to the world space.

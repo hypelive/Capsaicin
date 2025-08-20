@@ -12,11 +12,4 @@ struct VertexParams
 
 #endif
 
-struct DrawConstants
-{
-    float4x4 invViewProjection;
-    float2   invScreenSize;
-    float2   padding;
-};
-
 #endif

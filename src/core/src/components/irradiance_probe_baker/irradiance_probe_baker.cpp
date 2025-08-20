@@ -50,7 +50,7 @@ void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) no
         {0.0f, 1.0f, 0.0f}
     };
 
-    std::array<DrawConstants, 6> drawData;
+    std::array<float4x4, 6> drawData;
 
     for (uint32_t faceIndex = 0; faceIndex < 6; ++faceIndex)
     {
@@ -59,17 +59,17 @@ void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) no
         const auto viewProjectionMatrix = projectionMatrix * viewMatrix;
         const auto invViewProjectionMatrix = glm::inverse(viewProjectionMatrix);
 
-        drawData[faceIndex].invViewProjection = invViewProjectionMatrix;
-        drawData[faceIndex].invScreenSize     =
-            glm::vec2(1.0f / static_cast<float>(m_irradianceProbeTexture.getWidth()),
-                1.0f / static_cast<float>(m_irradianceProbeTexture.getHeight()));
+        drawData[faceIndex] = invViewProjectionMatrix;
     }
 
     gfxDestroyBuffer(gfx_, m_drawConstants);
-    m_drawConstants = gfxCreateBuffer<DrawConstants>(gfx_, 6, drawData.data());
+    m_drawConstants = gfxCreateBuffer<float4x4>(gfx_, 6, drawData.data());
 
     gfxProgramSetParameter(gfx_, m_bakerProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
     gfxProgramSetParameter(gfx_, m_bakerProgram, "g_DrawConstants", m_drawConstants);
+    gfxProgramSetParameter(gfx_, m_bakerProgram, "g_invScreenSize",
+        float2{1.0f / static_cast<float>(m_irradianceProbeTexture.getWidth()),
+               1.0f / static_cast<float>(m_irradianceProbeTexture.getHeight())});
     gfxCommandBindKernel(gfx_, m_bakerKernel);
 
     for (uint32_t faceIndex = 0; faceIndex < drawData.size(); ++faceIndex)

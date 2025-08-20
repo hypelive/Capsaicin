@@ -12,7 +12,7 @@ struct VertexParams
 
 #endif
 
-struct DrawConstants
+struct SkyboxConstants
 {
     float4x4 invViewProjection;
     float3   cameraPosition;
