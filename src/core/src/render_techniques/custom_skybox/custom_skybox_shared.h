@@ -16,7 +16,7 @@ struct DrawConstants
 {
     float4x4 invViewProjection;
     float3   cameraPosition;
-    float    padding; // Padding to align to 16 bytes
+    float    padding;
     float2   invScreenSize;
 };
 

@@ -20,7 +20,7 @@ Pixel main(in VertexParams params)
     // Translate point from near plane (we have inversed depth) to the world space.
     float4 worldPosition = mul(g_DrawConstants[0].invViewProjection, float4(ndc, 1.0f, 1.0f));
     worldPosition.xyz /= worldPosition.w;
-    const float3 viewDirection = normalize(worldPosition.xyz - g_DrawConstants[0].cameraPosition);
+    const float3 viewDirection = normalize(worldPosition.xyz - g_DrawConstants[0].cameraPosition.xyz);
     
     // Sample the environment map
     pixel.color = float4(g_EnvironmentMap.SampleLevel(g_LinearSampler, viewDirection, 0).xyz, 1.0f);

@@ -1,6 +1,7 @@
 #include "custom_visibility_buffer.h"
 #include "capsaicin_internal.h"
 #include "custom_visibility_buffer_shared.h"
+#include "components/irradiance_probe_baker/irradiance_probe_baker.h"
 
 namespace Capsaicin
 {
@@ -28,6 +29,7 @@ CustomVisibilityBuffer::RenderOptions CustomVisibilityBuffer::convertOptions([[m
 ComponentList CustomVisibilityBuffer::getComponents() const noexcept
 {
     ComponentList components;
+    components.emplace_back("IrradianceProbeBaker");
     return components;
 }
 

@@ -5,8 +5,7 @@
 namespace Capsaicin
 {
 CustomSkybox::CustomSkybox()
-    : RenderTechnique("Custom Skybox")
-{}
+    : RenderTechnique("Custom Skybox") {}
 
 CustomSkybox::~CustomSkybox()
 {
@@ -19,7 +18,8 @@ RenderOptionList CustomSkybox::getRenderOptions() noexcept
     return newOptions;
 }
 
-CustomSkybox::RenderOptions CustomSkybox::convertOptions([[maybe_unused]] RenderOptionList const &options) noexcept
+CustomSkybox::RenderOptions CustomSkybox::convertOptions(
+    [[maybe_unused]] RenderOptionList const &options) noexcept
 {
     RenderOptions newOptions;
     return newOptions;
@@ -71,14 +71,14 @@ bool CustomSkybox::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noe
 
 void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    auto const& colorTexture = capsaicin.getSharedTexture("Color");
+    auto const &colorTexture = capsaicin.getSharedTexture("Color");
 
     // Filling the draw constants.
     {
-        DrawConstants drawConstants = {};
+        DrawConstants drawConstants     = {};
         drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
-        drawConstants.cameraPosition = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
+        drawConstants.cameraPosition    = capsaicin.getCamera().eye;
+        drawConstants.invScreenSize     = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
         gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
         m_drawConstantsBuffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
@@ -90,14 +90,11 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
 
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_LinearSampler", capsaicin.getLinearSampler());
-    }
 
-    // Run full screen triangle.
-    {
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandBindColorTarget(gfx_, 0, colorTexture);
-        gfxCommandBindKernel(gfx_, m_skyboxKernel);
 
+        gfxCommandBindKernel(gfx_, m_skyboxKernel);
         gfxCommandDraw(gfx_, 3);
     }
 }
