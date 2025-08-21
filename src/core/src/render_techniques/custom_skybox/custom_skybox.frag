@@ -1,5 +1,6 @@
 #include "custom_skybox_shared.h"
 #include "math/math.hlsl"
+#include "math/color.hlsl"
 
 ConstantBuffer<SkyboxConstants> g_DrawConstants;
 TextureCube g_EnvironmentMap;
@@ -22,8 +23,10 @@ Pixel main(in VertexParams params)
     worldPosition.xyz /= worldPosition.w;
     const float3 viewDirection = normalize(worldPosition.xyz - g_DrawConstants.cameraPosition.xyz);
     
-    // Sample the environment map
-    pixel.color = float4(g_EnvironmentMap.SampleLevel(g_LinearSampler, viewDirection, 0).xyz, 1.0f);
+    float3 radiance = g_EnvironmentMap.SampleLevel(g_LinearSampler, viewDirection, 0).xyz;
+    float3 color = tonemapSimpleReinhard(radiance);
+    color = pow(color, 1.0f / 2.2f);
+    pixel.color = float4(color, 1.0f);
 
     return pixel;
 }

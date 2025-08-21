@@ -1,6 +1,7 @@
 #include "custom_skybox.h"
 #include "capsaicin_internal.h"
 #include "custom_skybox_shared.h"
+#include "components/irradiance_probe_baker/irradiance_probe_baker.h"
 
 namespace Capsaicin
 {
@@ -87,7 +88,9 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", constantBuffer);
-        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
+        // TODO replace with the environment map.
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap",
+            capsaicin.getComponent<IrradianceProbeBaker>()->getIrradianceProbeTexture());
 
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_LinearSampler", capsaicin.getLinearSampler());
 
