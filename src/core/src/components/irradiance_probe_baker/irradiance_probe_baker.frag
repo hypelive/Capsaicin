@@ -17,7 +17,7 @@ Pixel main(in VertexParams params)
     Pixel pixel;
 
     float2 uv = params.screenPosition.xy * g_invScreenSize;
-    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
+    float2 ndc = 2.0f * uv - 1.0f;
 
     // Translate point from near plane (we have inversed depth) to the world space.
     float4 worldPosition = mul(g_DrawConstants[g_FaceIndex], float4(ndc, 1.0f, 1.0f));
@@ -39,13 +39,13 @@ Pixel main(in VertexParams params)
     float3 bitangentDirection = cross(viewDirection, tangentDirection);
 
     float3x3 tangentMatrix = float3x3(
-        tangentDirection.x, bitangentDirection.x, viewDirection.x,
-        tangentDirection.y, bitangentDirection.y, viewDirection.y,
-        tangentDirection.z, bitangentDirection.z, viewDirection.z
+        tangentDirection.x, bitangentDirection.x, viewDirection.x, // row 1
+        tangentDirection.y, bitangentDirection.y, viewDirection.y, // row 2
+        tangentDirection.z, bitangentDirection.z, viewDirection.z  // row 3
     );
 
-    const float thetaStep = HALF_PI * g_invScreenSize.y;
-    const float phiStep = TWO_PI * g_invScreenSize.x;
+    const float thetaStep = HALF_PI / 64.0f;
+    const float phiStep = TWO_PI / 64.0f;
 
     float3 irradiance = 0.0f;
     for (float theta = thetaStep * 0.5f; theta < HALF_PI; theta += thetaStep)
@@ -57,13 +57,8 @@ Pixel main(in VertexParams params)
             float2 sinCosPhi;
             sincos(phi, sinCosPhi.x, sinCosPhi.y);
 
-#if 0
             float3 sampleDirection = float3(sinCosTheta.x * sinCosPhi.y, sinCosTheta.x * sinCosPhi.x, sinCosTheta.y);
             sampleDirection = mul(tangentMatrix, sampleDirection);
-#else
-            float3 sampleDirection = float3(sinCosTheta.x * sinCosPhi.y, sinCosTheta.y, sinCosTheta.x * sinCosPhi.x);
-            sampleDirection = tangentDirection * sampleDirection.x + viewDirection * sampleDirection.y + bitangentDirection * sampleDirection.z;
-#endif
 
             float3 environmentSample = g_EnvironmentMap.SampleLevel(g_LinearSampler, sampleDirection, 0).xyz;
             irradiance += (environmentSample * sinCosTheta.y) * (sinCosTheta.x * phiStep * thetaStep); 

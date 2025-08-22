@@ -34,20 +34,20 @@ bool IrradianceProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
 void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
     constexpr glm::vec3 directions[6] = {
-        {-1.0f, 0.0f, 0.0f},
         {1.0f, 0.0f, 0.0f},
+        {-1.0f, 0.0f, 0.0f},
         {0.0f, 1.0f, 0.0f},
         {0.0f, -1.0f, 0.0f},
-        {0.0f, 0.0f, -1.0f},
-        {0.0f, 0.0f, 1.0f}
+        {0.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f, -1.0f}
     };
     constexpr glm::vec3 upVectors[6] = {
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, -1.0f},
+        {0.0f, -1.0f, 0.0f},
+        {0.0f, -1.0f, 0.0f},
         {0.0f, 0.0f, 1.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f}
+        {0.0f, 0.0f, -1.0f},
+        {0.0f, -1.0f, 0.0f},
+        {0.0f, -1.0f, 0.0f}
     };
 
     std::array<float4x4, 6> drawData;
