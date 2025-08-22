@@ -74,23 +74,23 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
 {
     auto const &colorTexture = capsaicin.getSharedTexture("Color");
 
-    GfxBuffer const constantBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
+    const auto& drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
     // Filling the draw constants.
     {
-        SkyboxConstants drawConstants     = {};
+        SkyboxConstants drawConstants   = {};
         drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
         drawConstants.cameraPosition    = capsaicin.getCamera().eye;
         drawConstants.invScreenSize     = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
-        gfxBufferGetData<SkyboxConstants>(gfx_, constantBuffer)[0] = drawConstants;
+        gfxBufferGetData<SkyboxConstants>(gfx_, drawConstantsBuffer)[0] = drawConstants;
     }
 
     // Set the root parameters.
     {
-        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", constantBuffer);
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", drawConstantsBuffer);
         // TODO replace with the environment map.
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap",
-            capsaicin.getComponent<IrradianceProbeBaker>()->getIrradianceProbeTexture());
+            capsaicin.getEnvironmentBuffer());
 
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_LinearSampler", capsaicin.getLinearSampler());
 
@@ -100,11 +100,12 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
         gfxCommandBindKernel(gfx_, m_skyboxKernel);
         gfxCommandDraw(gfx_, 3);
     }
+
+    gfxDestroyBuffer(gfx_, drawConstantsBuffer);
 }
 
 void CustomSkybox::terminate() noexcept
 {
-    gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
     gfxDestroyKernel(gfx_, m_skyboxKernel);
     gfxDestroyProgram(gfx_, m_skyboxProgram);
 }

@@ -84,6 +84,9 @@ void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) no
 void IrradianceProbeBaker::terminate() noexcept
 {
     gfxDestroyTexture(gfx_, m_irradianceProbeTexture);
+    gfxDestroyBuffer(gfx_, m_drawConstants);
+    gfxDestroyKernel(gfx_, m_bakerKernel);
+    gfxDestroyProgram(gfx_, m_bakerProgram);
 }
 
 void IrradianceProbeBaker::addProgramParameters(

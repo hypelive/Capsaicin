@@ -85,6 +85,5 @@ private:
 
     GfxProgram m_skyboxProgram;
     GfxKernel m_skyboxKernel;
-    GfxBuffer m_drawConstantsBuffer;
 };
 } // namespace Capsaicin
