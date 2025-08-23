@@ -24,6 +24,7 @@ Pixel main(in VertexParams params)
     worldPosition.xyz /= worldPosition.w;
     const float3 viewDirection = normalize(worldPosition.xyz);
 
+    // Should be in sync with the .cpp.
     float3 upVectors[6] = {
         float3(0.0f, 1.0f, 0.0f),
         float3(0.0f, 1.0f, 0.0f),

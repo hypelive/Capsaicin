@@ -33,6 +33,11 @@ bool IrradianceProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
 
 void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
+    if (!capsaicin.getEnvironmentMapUpdated())
+    {
+        return;
+    }
+
     constexpr glm::vec3 directions[6] = {
         {1.0f, 0.0f, 0.0f},
         {-1.0f, 0.0f, 0.0f},
@@ -41,6 +46,8 @@ void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) no
         {0.0f, 0.0f, 1.0f},
         {0.0f, 0.0f, -1.0f}
     };
+
+    // Should be in sync with the fragment shader.
     constexpr glm::vec3 upVectors[6] = {
         {0.0f, -1.0f, 0.0f},
         {0.0f, -1.0f, 0.0f},
