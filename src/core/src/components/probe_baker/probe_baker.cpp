@@ -1,18 +1,18 @@
-#include "irradiance_probe_baker.h"
+#include "probe_baker.h"
 #include "capsaicin_internal.h"
 #include "irradiance_probe_baker_shared.h"
 
 namespace Capsaicin
 {
-inline IrradianceProbeBaker::IrradianceProbeBaker() noexcept
+inline ProbeBaker::ProbeBaker() noexcept
     : Component(Name) {}
 
-IrradianceProbeBaker::~IrradianceProbeBaker() noexcept
+ProbeBaker::~ProbeBaker() noexcept
 {
     terminate();
 }
 
-bool IrradianceProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
+bool ProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
 {
     constexpr uint32_t C_PROBE_RESOLUTION = 64;
 
@@ -25,13 +25,13 @@ bool IrradianceProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
     gfxDrawStateSetDepthFunction(bakerDrawState, D3D12_COMPARISON_FUNC_GREATER);
     gfxDrawStateSetColorTarget(bakerDrawState, 0, m_irradianceProbeTexture.getFormat());
 
-    m_bakerProgram = capsaicin.createProgram("components/irradiance_probe_baker/irradiance_probe_baker");
-    m_bakerKernel  = gfxCreateGraphicsKernel(gfx_, m_bakerProgram, bakerDrawState);
+    m_irradianceBakerProgram = capsaicin.createProgram("components/probe_baker/irradiance_probe_baker");
+    m_irradianceBakerKernel  = gfxCreateGraphicsKernel(gfx_, m_irradianceBakerProgram, bakerDrawState);
 
     return true;
 }
 
-void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
+void ProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
     if (!capsaicin.getEnvironmentMapUpdated())
     {
@@ -72,31 +72,31 @@ void IrradianceProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) no
     gfxDestroyBuffer(gfx_, m_drawConstants);
     m_drawConstants = gfxCreateBuffer<float4x4>(gfx_, 6, drawData.data());
 
-    gfxProgramSetParameter(gfx_, m_bakerProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
-    gfxProgramSetParameter(gfx_, m_bakerProgram, "g_DrawConstants", m_drawConstants);
-    gfxProgramSetParameter(gfx_, m_bakerProgram, "g_invScreenSize",
+    gfxProgramSetParameter(gfx_, m_irradianceBakerProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
+    gfxProgramSetParameter(gfx_, m_irradianceBakerProgram, "g_DrawConstants", m_drawConstants);
+    gfxProgramSetParameter(gfx_, m_irradianceBakerProgram, "g_invScreenSize",
         float2{1.0f / static_cast<float>(m_irradianceProbeTexture.getWidth()),
                1.0f / static_cast<float>(m_irradianceProbeTexture.getHeight())});
-    gfxCommandBindKernel(gfx_, m_bakerKernel);
+    gfxCommandBindKernel(gfx_, m_irradianceBakerKernel);
 
     for (uint32_t faceIndex = 0; faceIndex < drawData.size(); ++faceIndex)
     {
-        gfxProgramSetParameter(gfx_, m_bakerProgram, "g_FaceIndex", faceIndex);
+        gfxProgramSetParameter(gfx_, m_irradianceBakerProgram, "g_FaceIndex", faceIndex);
         gfxCommandBindColorTarget(gfx_, 0, m_irradianceProbeTexture, 0, faceIndex);
 
         gfxCommandDraw(gfx_, 3);
     }
 }
 
-void IrradianceProbeBaker::terminate() noexcept
+void ProbeBaker::terminate() noexcept
 {
     gfxDestroyTexture(gfx_, m_irradianceProbeTexture);
     gfxDestroyBuffer(gfx_, m_drawConstants);
-    gfxDestroyKernel(gfx_, m_bakerKernel);
-    gfxDestroyProgram(gfx_, m_bakerProgram);
+    gfxDestroyKernel(gfx_, m_irradianceBakerKernel);
+    gfxDestroyProgram(gfx_, m_irradianceBakerProgram);
 }
 
-void IrradianceProbeBaker::addProgramParameters(
+void ProbeBaker::addProgramParameters(
     [[maybe_unused]] CapsaicinInternal const &capsaicin,
     [[maybe_unused]] GfxProgram const &       program) const noexcept {}
 } // namespace Capsaicin

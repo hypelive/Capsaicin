@@ -1,7 +1,7 @@
 #include "custom_visibility_buffer.h"
 #include "capsaicin_internal.h"
 #include "custom_visibility_buffer_shared.h"
-#include "components/irradiance_probe_baker/irradiance_probe_baker.h"
+#include "components/probe_baker/probe_baker.h"
 
 namespace Capsaicin
 {
@@ -29,7 +29,7 @@ CustomVisibilityBuffer::RenderOptions CustomVisibilityBuffer::convertOptions(
 ComponentList CustomVisibilityBuffer::getComponents() const noexcept
 {
     ComponentList components;
-    components.emplace_back("IrradianceProbeBaker");
+    components.emplace_back("ProbeBaker");
     return components;
 }
 
@@ -160,7 +160,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MaterialBuffer",
             capsaicin.getMaterialBuffer());
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_IrradianceProbe",
-            capsaicin.getComponent<IrradianceProbeBaker>()->getIrradianceProbeTexture());
+            capsaicin.getComponent<ProbeBaker>()->getIrradianceProbeTexture());
 
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(),

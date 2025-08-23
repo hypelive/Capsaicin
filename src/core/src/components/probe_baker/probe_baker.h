@@ -4,22 +4,22 @@
 
 namespace Capsaicin
 {
-class IrradianceProbeBaker final
+class ProbeBaker final
     : public Component
-      , ComponentFactory::Registrar<IrradianceProbeBaker>
+      , ComponentFactory::Registrar<ProbeBaker>
 {
 public:
-    static constexpr std::string_view Name = "IrradianceProbeBaker";
+    static constexpr std::string_view Name = "ProbeBaker";
 
     /** Constructor. */
-    IrradianceProbeBaker() noexcept;
+    ProbeBaker() noexcept;
 
-    ~IrradianceProbeBaker() noexcept override;
+    ~ProbeBaker() noexcept override;
 
-    IrradianceProbeBaker(IrradianceProbeBaker const &other)                = delete;
-    IrradianceProbeBaker(IrradianceProbeBaker &&other) noexcept            = delete;
-    IrradianceProbeBaker &operator=(IrradianceProbeBaker const &other)     = delete;
-    IrradianceProbeBaker &operator=(IrradianceProbeBaker &&other) noexcept = delete;
+    ProbeBaker(ProbeBaker const &other)                = delete;
+    ProbeBaker(ProbeBaker &&other) noexcept            = delete;
+    ProbeBaker &operator=(ProbeBaker const &other)     = delete;
+    ProbeBaker &operator=(ProbeBaker &&other) noexcept = delete;
 
     /**
      * Initialise any internal data or state.
@@ -56,7 +56,7 @@ public:
 private:
     GfxTexture m_irradianceProbeTexture;
     GfxBuffer  m_drawConstants;
-    GfxProgram m_bakerProgram;
-    GfxKernel  m_bakerKernel;
+    GfxProgram m_irradianceBakerProgram;
+    GfxKernel  m_irradianceBakerKernel;
 };
 } // namespace Capsaicin

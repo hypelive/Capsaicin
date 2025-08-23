@@ -1,7 +1,7 @@
 #include "custom_skybox.h"
 #include "capsaicin_internal.h"
 #include "custom_skybox_shared.h"
-#include "components/irradiance_probe_baker/irradiance_probe_baker.h"
+#include "components/probe_baker/probe_baker.h"
 
 namespace Capsaicin
 {
@@ -74,7 +74,7 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
 {
     auto const &colorTexture = capsaicin.getSharedTexture("Color");
 
-    const auto& drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
+    const auto &drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
     // Filling the draw constants.
     {
         SkyboxConstants drawConstants   = {};
@@ -88,7 +88,6 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", drawConstantsBuffer);
-        // TODO replace with the environment map.
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap",
             capsaicin.getEnvironmentBuffer());
 
