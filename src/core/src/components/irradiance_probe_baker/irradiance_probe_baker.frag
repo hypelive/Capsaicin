@@ -61,7 +61,8 @@ Pixel main(in VertexParams params)
             sampleDirection = mul(tangentMatrix, sampleDirection);
 
             float3 environmentSample = g_EnvironmentMap.SampleLevel(g_LinearSampler, sampleDirection, 0).xyz;
-            irradiance += (environmentSample * sinCosTheta.y) * (sinCosTheta.x * phiStep * thetaStep); 
+            // Riemann sum.
+            irradiance += (environmentSample * sinCosTheta.y) * (sinCosTheta.x * phiStep * thetaStep);
         }
     }
     

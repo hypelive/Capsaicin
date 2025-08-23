@@ -13,6 +13,9 @@ StructuredBuffer<Light> g_LightsBuffer;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
 
+TextureCube g_IrradianceProbe;
+SamplerState g_LinearSampler;
+
 struct Pixel
 {
     float4 color : SV_Target0;
@@ -42,11 +45,15 @@ float3 applyInverseGamma(float3 color)
     return pow(color, 1.0f / 2.2f);
 }
 
-float3 calculateFresnelSchlick(float VdotH, float3 albedo, float metallic)
+float3 calculateFresnelSchlick(float VdotH, float3 F0)
 {
-    const float3 F0 = 0.04f;
-    const float3 effectiveF0 = lerp(F0, albedo, metallic);
-    return effectiveF0 + (1.0f - effectiveF0) * pow(clamp(1 - VdotH, 0.0f, 1.0f), 5.0f);
+    return F0 + (1.0f - F0) * pow(saturate(1.0f - VdotH), 5.0f);
+}
+
+// https://seblagarde.wordpress.com/2011/08/17/hello-world/
+float3 calculateFresnelSchlickWithRoughness(float VdotN, float3 F0, float roughness)
+{
+    return F0 + (max(1.0f - roughness, F0) - F0) * pow(saturate(1.0f - VdotN), 5.0f);
 }
 
 float calculateGGXNormalDistribution(float NdotH, float alpha)
@@ -70,6 +77,7 @@ float calculateSmithGeometry(float NdotV, float NdotL, float alpha)
     return calculateSchlickGGXGeometry(saturate(NdotV), alpha) * calculateSchlickGGXGeometry(saturate(NdotL), alpha);
 }
 
+// TODO support multiple lights.
 // https://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
 float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDirection)
 {
@@ -77,6 +85,8 @@ float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDire
     const float metallic = material.metallicity;
     const float roughness = material.roughness;
     const float alpha = roughness * roughness;
+    const float3 dielectricF0 = 0.04f;
+    const float3 F0 = lerp(dielectricF0, albedo, metallic);
 
     const uint lightsCount = g_LightsCountBuffer[0];
     if (lightsCount == 0)
@@ -95,7 +105,7 @@ float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDire
     const float NdotL = dot(normal, lightDirection);
     const float NdotV = dot(normal, viewDirection);
 
-    const float3 Fresnel = calculateFresnelSchlick(VdotH, albedo, metallic);
+    const float3 Fresnel = calculateFresnelSchlick(VdotH, F0);
     const float NDF = calculateGGXNormalDistribution(NdotH, alpha);
     const float G = calculateSmithGeometry(NdotV, NdotL, alpha);
 
@@ -103,6 +113,21 @@ float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDire
     const float3 diffuse = (1.0f - Fresnel) * albedo / PI;
 
     return (specular + diffuse) * max(0.0f, NdotL) * irradiance;
+}
+
+float3 indirectDiffuse(MaterialEvaluated material, float3 normal, float3 viewDirection)
+{
+    const float3 albedo = material.albedo;
+    const float metallic = material.metallicity;
+    const float roughness = material.roughness;
+    const float alpha = roughness * roughness;
+    const float3 dielectricF0 = 0.04f;
+    const float3 F0 = lerp(dielectricF0, albedo, metallic);
+
+    const float VdotN = max(0.0f, dot(viewDirection, normal));
+    const float3 Fresnel = calculateFresnelSchlickWithRoughness(VdotN, F0, alpha);
+    // TODO muliply by ambient occlusion.
+    return (1.0f - Fresnel) * albedo / PI * g_IrradianceProbe.SampleLevel(g_LinearSampler, normal, 0).rgb;
 }
 
 Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
@@ -118,7 +143,9 @@ Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
-    float3 radiance = directionalPBR(materialEvaluated, normal, viewDirection) + ambient(normal);
+    // TODO add indirect specular.
+    float3 radiance = directionalPBR(materialEvaluated, normal, viewDirection) +
+        indirectDiffuse(materialEvaluated, normal, viewDirection);
 
 #if 0
     float3 color = radiance;

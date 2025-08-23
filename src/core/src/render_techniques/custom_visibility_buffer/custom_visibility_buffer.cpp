@@ -6,8 +6,7 @@
 namespace Capsaicin
 {
 CustomVisibilityBuffer::CustomVisibilityBuffer()
-    : RenderTechnique("Custom Visibility buffer")
-{}
+    : RenderTechnique("Custom Visibility buffer") {}
 
 CustomVisibilityBuffer::~CustomVisibilityBuffer()
 {
@@ -20,7 +19,8 @@ RenderOptionList CustomVisibilityBuffer::getRenderOptions() noexcept
     return newOptions;
 }
 
-CustomVisibilityBuffer::RenderOptions CustomVisibilityBuffer::convertOptions([[maybe_unused]] RenderOptionList const &options) noexcept
+CustomVisibilityBuffer::RenderOptions CustomVisibilityBuffer::convertOptions(
+    [[maybe_unused]] RenderOptionList const &options) noexcept
 {
     RenderOptions newOptions;
     return newOptions;
@@ -57,7 +57,8 @@ DebugViewList CustomVisibilityBuffer::getDebugViews() const noexcept
 
 bool CustomVisibilityBuffer::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
 {
-    m_visibilityBufferProgram = capsaicin.createProgram("render_techniques/custom_visibility_buffer/custom_visibility_buffer");
+    m_visibilityBufferProgram = capsaicin.createProgram(
+        "render_techniques/custom_visibility_buffer/custom_visibility_buffer");
 
     GfxDrawState const visibilityBufferDrawState = {};
     gfxDrawStateSetCullMode(visibilityBufferDrawState, D3D12_CULL_MODE_BACK);
@@ -105,7 +106,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 
     // Filling the draw constants.
     {
-        DrawConstants drawConstants = {};
+        DrawConstants drawConstants  = {};
         drawConstants.viewProjection = capsaicin.getCameraMatrices().view_projection;
         drawConstants.cameraPosition = capsaicin.getCamera().eye;
         drawConstants.drawCount      = m_drawDataSize;
@@ -117,8 +118,8 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
     // Initialize directional light data.
     // TODO move it to a separate component.
     {
-        const uint32_t lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
-        const auto* const lights = gfxSceneGetLights(capsaicin.getScene());
+        const uint32_t    lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
+        const auto *const lights      = gfxSceneGetLights(capsaicin.getScene());
 
         gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
         m_lightsCountBuffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
@@ -144,17 +145,28 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsCountBuffer", m_lightsCountBuffer);
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsBuffer", m_lightsBuffer);
 
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletBuffer", capsaicin.getSharedBuffer("Meshlets"));
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletPackBuffer",capsaicin.getSharedBuffer("MeshletPack"));
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexBuffer", capsaicin.getVertexBuffer());
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_InstanceBuffer",
+            capsaicin.getInstanceBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TransformBuffer",
+            capsaicin.getTransformBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletBuffer",
+            capsaicin.getSharedBuffer("Meshlets"));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MeshletPackBuffer",
+            capsaicin.getSharedBuffer("MeshletPack"));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexBuffer",
+            capsaicin.getVertexBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_VertexDataIndex",
+            capsaicin.getVertexDataIndex());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_MaterialBuffer",
+            capsaicin.getMaterialBuffer());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_IrradianceProbe",
+            capsaicin.getComponent<IrradianceProbeBaker>()->getIrradianceProbeTexture());
 
         auto const &textures = capsaicin.getTextures();
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(), static_cast<uint32_t>(textures.size()));
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler", capsaicin.getLinearSampler());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(),
+            static_cast<uint32_t>(textures.size()));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler",
+            capsaicin.getLinearSampler());
     }
 
     // Run the amplification shader.
@@ -166,7 +178,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("Color"));
         gfxCommandBindKernel(gfx_, m_visibilityBufferKernel);
 
-        uint32_t const* num_threads  = gfxKernelGetNumThreads(gfx_, m_visibilityBufferKernel);
+        uint32_t const *num_threads  = gfxKernelGetNumThreads(gfx_, m_visibilityBufferKernel);
         uint32_t const  num_groups_x = (m_drawDataSize + num_threads[0] - 1) / num_threads[0];
 
         gfxCommandDrawMesh(gfx_, num_groups_x, 1, 1);
