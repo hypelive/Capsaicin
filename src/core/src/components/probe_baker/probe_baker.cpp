@@ -16,13 +16,17 @@ bool ProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
 {
     constexpr uint32_t C_IRRADIANCE_PROBE_RESOLUTION            = 64;
     constexpr uint32_t C_PREFILTERED_ENVIRONMENT_MAP_RESOLUTION = 1024;
+    constexpr uint32_t C_BRDF_LUT_RESOLUTION                    = 512;
 
     m_irradianceProbeTexture =
         gfxCreateTextureCube(gfx_, C_IRRADIANCE_PROBE_RESOLUTION, DXGI_FORMAT_R16G16B16A16_FLOAT);
-    m_irradianceProbeTexture.setName("IrradianceProbe");
+    m_irradianceProbeTexture.setName("Irradiance Probe");
     m_prefilteredEnvironmentMap = gfxCreateTextureCube(
         gfx_, C_PREFILTERED_ENVIRONMENT_MAP_RESOLUTION, DXGI_FORMAT_R16G16B16A16_FLOAT, 5);
-    m_prefilteredEnvironmentMap.setName("PrefilteredEnvironmentMap");
+    m_prefilteredEnvironmentMap.setName("Prefiltered Environment Map");
+    m_brdfLut =
+        gfxCreateTexture2D(gfx_, C_BRDF_LUT_RESOLUTION, C_BRDF_LUT_RESOLUTION, DXGI_FORMAT_R16G16_FLOAT);
+    m_brdfLut.setName("BRDF LUT");
 
     const GfxDrawState irradianceBakerDrawState = {};
     gfxDrawStateSetCullMode(irradianceBakerDrawState, D3D12_CULL_MODE_BACK);
@@ -43,6 +47,28 @@ bool ProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
         capsaicin.createProgram("components/probe_baker/prefiltered_environment_baker");
     m_prefilteredEnvironmentBakerKernel = gfxCreateGraphicsKernel(gfx_,
         m_prefilteredEnvironmentBakerProgram, prefilteredEnvironmentBakerDrawState);
+
+    // Bake BRDF LUT.
+    {
+        GfxDrawState const brdfLutBakerDrawState = {};
+        gfxDrawStateSetCullMode(brdfLutBakerDrawState, D3D12_CULL_MODE_BACK);
+        gfxDrawStateSetDepthFunction(brdfLutBakerDrawState, D3D12_COMPARISON_FUNC_GREATER);
+        gfxDrawStateSetColorTarget(brdfLutBakerDrawState, 0, m_brdfLut.getFormat());
+
+        auto const brdfLutBakerProgram = capsaicin.createProgram("components/probe_baker/brdf_lut_baker");
+        auto const brdfLutBakerKernel  = gfxCreateGraphicsKernel(gfx_, brdfLutBakerProgram,
+            brdfLutBakerDrawState);
+
+        gfxProgramSetParameter(gfx_, brdfLutBakerProgram, "g_invScreenSize",
+            float2{1.0f / static_cast<float>(m_brdfLut.getWidth()),
+                   1.0f / static_cast<float>(m_brdfLut.getHeight())});
+        gfxCommandBindKernel(gfx_, brdfLutBakerKernel);
+        gfxCommandBindColorTarget(gfx_, 0, m_brdfLut);
+        gfxCommandDraw(gfx_, 3);
+
+        gfxDestroyKernel(gfx_, brdfLutBakerKernel);
+        gfxDestroyProgram(gfx_, brdfLutBakerProgram);
+    }
 
     return m_irradianceBakerKernel && m_prefilteredEnvironmentBakerKernel;
 }
@@ -122,7 +148,7 @@ void ProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 
         const uint32_t mipLevels     = m_prefilteredEnvironmentMap.getMipLevels();
         float2         invScreenSize = {1.0f / static_cast<float>(m_prefilteredEnvironmentMap.getWidth()),
-                                        1.0f / static_cast<float>(m_prefilteredEnvironmentMap.getHeight())};
+                                1.0f / static_cast<float>(m_prefilteredEnvironmentMap.getHeight())};
         for (uint32_t mipIndex = 0; mipIndex < mipLevels; ++mipIndex)
         {
             // TODO think about the roughness mapping.
@@ -147,6 +173,7 @@ void ProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 
 void ProbeBaker::terminate() noexcept
 {
+    gfxDestroyTexture(gfx_, m_brdfLut);
     gfxDestroyTexture(gfx_, m_irradianceProbeTexture);
     gfxDestroyTexture(gfx_, m_prefilteredEnvironmentMap);
     gfxDestroyBuffer(gfx_, m_drawConstants);

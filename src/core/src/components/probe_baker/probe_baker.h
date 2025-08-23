@@ -54,10 +54,12 @@ public:
     }
 
     GfxTexture const &getPrefilteredEnvironmentMap() const noexcept { return m_prefilteredEnvironmentMap; }
+    GfxTexture const &getBrdfLut() const noexcept { return m_brdfLut; }
 
 private:
     GfxTexture m_irradianceProbeTexture;
     GfxTexture m_prefilteredEnvironmentMap;
+    GfxTexture m_brdfLut;
     GfxBuffer  m_drawConstants;
     GfxProgram m_irradianceBakerProgram;
     GfxKernel  m_irradianceBakerKernel;

@@ -13,7 +13,9 @@ StructuredBuffer<Light> g_LightsBuffer;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
 
-TextureCube g_IrradianceProbe;
+TextureCube<float4> g_IrradianceProbe;
+Texture2D<float4> g_PrefilteredEnvironmentMap;
+Texture2D<float2> g_BRDFLUT;
 SamplerState g_LinearSampler;
 
 struct Pixel
@@ -65,6 +67,7 @@ float calculateGGXNormalDistribution(float NdotH, float alpha)
     return numerator / (denominator + FLT_EPSILON);
 }
 
+// TODO check if we need to replace alpha here.
 float calculateSchlickGGXGeometry(float NdotV, float alpha)
 {
     const float k = alpha / 2.0f;
