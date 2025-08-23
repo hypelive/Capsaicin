@@ -165,6 +165,8 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(),
             static_cast<uint32_t>(textures.size()));
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureSampler",
+            capsaicin.getLinearWrapSampler());
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler",
             capsaicin.getLinearSampler());
     }

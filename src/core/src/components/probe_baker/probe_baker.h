@@ -48,15 +48,20 @@ public:
      */
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
-    const GfxTexture& getIrradianceProbeTexture() const noexcept
+    const GfxTexture &getIrradianceProbeTexture() const noexcept
     {
         return m_irradianceProbeTexture;
     }
 
+    GfxTexture const &getPrefilteredEnvironmentMap() const noexcept { return m_prefilteredEnvironmentMap; }
+
 private:
     GfxTexture m_irradianceProbeTexture;
+    GfxTexture m_prefilteredEnvironmentMap;
     GfxBuffer  m_drawConstants;
     GfxProgram m_irradianceBakerProgram;
     GfxKernel  m_irradianceBakerKernel;
+    GfxProgram m_prefilteredEnvironmentBakerProgram;
+    GfxKernel  m_prefilteredEnvironmentBakerKernel;
 };
 } // namespace Capsaicin

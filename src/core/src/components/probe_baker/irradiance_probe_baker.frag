@@ -67,7 +67,6 @@ Pixel main(in VertexParams params)
         }
     }
     
-    // Sample the environment map
     pixel.color = float4(irradiance, 1.0f);
 
     return pixel;
