@@ -81,15 +81,8 @@ float calculateSmithGeometry(float NdotV, float NdotL, float alpha)
 
 // TODO support multiple lights.
 // https://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
-float3 calculateDirectLighting(MaterialEvaluated material, float3 normal, float3 viewDirection)
+float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection)
 {
-    const float3 albedo = material.albedo;
-    const float metallic = material.metallicity;
-    const float roughness = material.roughness;
-    const float alpha = roughness * roughness;
-    const float3 dielectricF0 = 0.04f;
-    const float3 F0 = lerp(dielectricF0, albedo, metallic);
-
     const uint lightsCount = g_LightsCountBuffer[0];
     if (lightsCount == 0)
     {
@@ -107,35 +100,28 @@ float3 calculateDirectLighting(MaterialEvaluated material, float3 normal, float3
     const float NdotL = dot(normal, lightDirection);
     const float NdotV = dot(normal, viewDirection);
 
-    const float3 Fresnel = calculateFresnelSchlick(VdotH, F0);
-    const float NDF = calculateGGXNormalDistribution(NdotH, alpha);
-    const float G = calculateSmithGeometry(NdotV, NdotL, alpha);
+    const float3 Fresnel = calculateFresnelSchlick(VdotH, material.F0);
+    const float NDF = calculateGGXNormalDistribution(NdotH, material.roughnessAlpha);
+    const float G = calculateSmithGeometry(NdotV, NdotL, material.roughnessAlpha);
 
     const float3 specular = (Fresnel * NDF * G) / 4.0f;
-    const float3 diffuse = (1.0f - Fresnel) * albedo / PI;
+    const float3 diffuse = (1.0f - Fresnel) * material.albedo / PI;
 
     return (specular + diffuse) * max(0.0f, NdotL) * irradiance;
 }
 
-float3 calculateIndirectLighting(MaterialEvaluated material, float3 normal, float3 viewDirection)
+float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection)
 {
-    const float3 albedo = material.albedo;
-    const float metallic = material.metallicity;
-    const float roughness = material.roughness;
-    const float alpha = roughness * roughness;
-    const float3 dielectricF0 = 0.04f;
-    const float3 F0 = lerp(dielectricF0, albedo, metallic);
-
     const float VdotN = max(0.0f, dot(viewDirection, normal));
-    const float3 Fresnel = calculateFresnelSchlickWithRoughness(VdotN, F0, alpha);
-    const float3 diffuse = (1.0f - Fresnel) * albedo / PI * g_IrradianceProbe.SampleLevel(g_LinearSampler, normal, 0).rgb;
+    const float3 Fresnel = calculateFresnelSchlickWithRoughness(VdotN, material.F0, material.roughnessAlpha);
+    const float3 diffuse = (1.0f - Fresnel) * material.albedo / PI * g_IrradianceProbe.SampleLevel(g_LinearSampler, normal, 0).rgb;
 
     const float C_PREFILTERED_MAP_MAX_MIP = 4.0f;
-    const float prefilteredMapMip = roughness * C_PREFILTERED_MAP_MAX_MIP;
+    const float prefilteredMapMip = material.roughnessAlpha * C_PREFILTERED_MAP_MAX_MIP;
     const float3 reflectionVector = reflect(-viewDirection, normal);
     const float3 prefilteredColor = g_PrefilteredEnvironmentMap.SampleLevel(g_LinearSampler, reflectionVector, prefilteredMapMip).rgb;
-    const float2 brdf = g_BrdfLut.SampleLevel(g_LinearSampler, float2(VdotN, roughness), 0.0f).xy;
-    const float3 specular = Fresnel * prefilteredColor * (F0 * brdf.x + brdf.y);
+    const float2 brdf = g_BrdfLut.SampleLevel(g_LinearSampler, float2(VdotN, material.roughnessAlpha), 0.0f).xy;
+    const float3 specular = Fresnel * prefilteredColor * (material.F0 * brdf.x + brdf.y);
 
     // TODO add AO.
     return diffuse + specular;
@@ -150,13 +136,14 @@ Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
     Instance instance = g_InstanceBuffer[instanceID];
     Material material = g_MaterialBuffer[instance.material_index];
     MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, params.uv);
+    MaterialBRDF materialBrdf = MakeMaterialBRDF(materialEvaluated);
 
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
     // TODO add indirect specular.
-    float3 radiance = calculateDirectLighting(materialEvaluated, normal, viewDirection) +
-        calculateIndirectLighting(materialEvaluated, normal, viewDirection);
+    float3 radiance = calculateDirectLighting(materialBrdf, normal, viewDirection) +
+        calculateIndirectLighting(materialBrdf, normal, viewDirection);
 
 #if 0
     float3 color = radiance;

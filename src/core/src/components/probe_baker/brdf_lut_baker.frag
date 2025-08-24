@@ -33,12 +33,11 @@ Pixel main(in VertexParams params)
 {
     Pixel pixel;
 
-    // X - cosTheta, Y - roughness.
+    // X - cosTheta, Y - roughnessAlpha.
     float2 uv = params.screenPosition.xy * g_invScreenSize;
     float NdotV = uv.x;
     float3 viewDirection = float3(sqrt(1.0f - NdotV * NdotV), 0.0f, NdotV);
-    float roughness = uv.y;
-    float a = roughness * roughness;
+    float alpha = uv.y;
 
     float3 normal = float3(0.0f, 0.0f, 1.0f);
     float3 tangent = cross(float3(1.0f, 0.0f, 0.0f), normal);
@@ -57,7 +56,7 @@ Pixel main(in VertexParams params)
         // https://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_notes_v2.pdf
         float phi = 2.0 * PI * xi.x;
         float2 sinCosTheta;
-        sinCosTheta.y = sqrt((1.0 - xi.y) / (1.0 + (a * a - 1.0) * xi.y));
+        sinCosTheta.y = sqrt((1.0 - xi.y) / (1.0 + (alpha * alpha - 1.0) * xi.y));
         sinCosTheta.x = sqrt(1.0 - sinCosTheta.y * sinCosTheta.y);
         float2 sinCosPhi;
         sincos(phi, sinCosPhi.x, sinCosPhi.y);
@@ -71,7 +70,7 @@ Pixel main(in VertexParams params)
             float NdotH = max(0.0f, dot(normal, microsurfaceNormalDirection));
             float VdotH = max(0.0f, dot(viewDirection, microsurfaceNormalDirection));
 
-            float G = GeometrySmith(NdotV, NdotL, a);
+            float G = GeometrySmith(NdotV, NdotL, alpha);
             float FresnelCoefficient = pow(1.0 - VdotH, 5.0);
 
             resultScaleOffset += ((G * VdotH) / (NdotH * NdotV)) * float2((1.0 - FresnelCoefficient), FresnelCoefficient);
