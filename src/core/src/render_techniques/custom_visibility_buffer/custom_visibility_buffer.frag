@@ -14,8 +14,8 @@ StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
 
 TextureCube<float4> g_IrradianceProbe;
-Texture2D<float4> g_PrefilteredEnvironmentMap;
-Texture2D<float2> g_BRDFLUT;
+TextureCube<float4> g_PrefilteredEnvironmentMap;
+Texture2D<float2> g_BrdfLut;
 SamplerState g_LinearSampler;
 
 struct Pixel
@@ -82,7 +82,7 @@ float calculateSmithGeometry(float NdotV, float NdotL, float alpha)
 
 // TODO support multiple lights.
 // https://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
-float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDirection)
+float3 calculateDirectLighting(MaterialEvaluated material, float3 normal, float3 viewDirection)
 {
     const float3 albedo = material.albedo;
     const float metallic = material.metallicity;
@@ -118,7 +118,7 @@ float3 directionalPBR(MaterialEvaluated material, float3 normal, float3 viewDire
     return (specular + diffuse) * max(0.0f, NdotL) * irradiance;
 }
 
-float3 indirectDiffuse(MaterialEvaluated material, float3 normal, float3 viewDirection)
+float3 calculateIndirectLighting(MaterialEvaluated material, float3 normal, float3 viewDirection)
 {
     const float3 albedo = material.albedo;
     const float metallic = material.metallicity;
@@ -129,8 +129,18 @@ float3 indirectDiffuse(MaterialEvaluated material, float3 normal, float3 viewDir
 
     const float VdotN = max(0.0f, dot(viewDirection, normal));
     const float3 Fresnel = calculateFresnelSchlickWithRoughness(VdotN, F0, alpha);
-    // TODO muliply by ambient occlusion.
-    return (1.0f - Fresnel) * albedo / PI * g_IrradianceProbe.SampleLevel(g_LinearSampler, normal, 0).rgb;
+    const float3 diffuse = (1.0f - Fresnel) * albedo / PI * g_IrradianceProbe.SampleLevel(g_LinearSampler, normal, 0).rgb;
+
+    const float C_PREFILTERED_MAP_MAX_MIP = 4.0f;
+    const float prefilteredMapMip = roughness * C_PREFILTERED_MAP_MAX_MIP;
+    const float3 reflectionVector = reflect(-viewDirection, normal);
+    const float3 prefilteredColor = g_PrefilteredEnvironmentMap.SampleLevel(g_LinearSampler, reflectionVector, prefilteredMapMip).rgb;
+    const float2 brdf = g_BrdfLut.SampleLevel(g_LinearSampler, float2(VdotN, roughness), 0.0f).xy;
+    // TODO why multiply by Fresnel and not F0?
+    const float3 specular = prefilteredColor * (Fresnel * brdf.x + brdf.y);
+
+    // TODO add AO.
+    return diffuse + specular;
 }
 
 Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
@@ -147,8 +157,8 @@ Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
     // TODO add indirect specular.
-    float3 radiance = directionalPBR(materialEvaluated, normal, viewDirection) +
-        indirectDiffuse(materialEvaluated, normal, viewDirection);
+    float3 radiance = calculateDirectLighting(materialEvaluated, normal, viewDirection) +
+        calculateIndirectLighting(materialEvaluated, normal, viewDirection);
 
 #if 0
     float3 color = radiance;

@@ -161,6 +161,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
             capsaicin.getMaterialBuffer());
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_IrradianceProbe",
             capsaicin.getComponent<ProbeBaker>()->getIrradianceProbeTexture());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_PrefilteredEnvironmentMap",
+            capsaicin.getComponent<ProbeBaker>()->getPrefilteredEnvironmentMap());
+        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_BrdfLut",
+            capsaicin.getComponent<ProbeBaker>()->getBrdfLut());
 
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(),
