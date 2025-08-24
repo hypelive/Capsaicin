@@ -1,6 +1,7 @@
 #include "custom_visibility_buffer.h"
 #include "capsaicin_internal.h"
 #include "custom_visibility_buffer_shared.h"
+#include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
 namespace Capsaicin
@@ -30,6 +31,7 @@ ComponentList CustomVisibilityBuffer::getComponents() const noexcept
 {
     ComponentList components;
     components.emplace_back("ProbeBaker");
+    components.emplace_back("CustomLightBuilder");
     return components;
 }
 
@@ -115,35 +117,10 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         m_drawConstantsBuffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
     }
 
-    // Initialize directional light data.
-    // TODO move it to a separate component.
-    {
-        const uint32_t    lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
-        const auto *const lights      = gfxSceneGetLights(capsaicin.getScene());
-
-        gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
-        m_lightsCountBuffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
-
-        if (lightsCount > 0)
-        {
-            auto &firstLight = lights[0];
-            if (firstLight.type == kGfxLightType_Directional)
-            {
-                const Light directionalLight = MakeDirectionalLight(firstLight.color * firstLight.intensity,
-                    normalize(firstLight.direction), std::numeric_limits<float>::max());
-
-                gfxDestroyBuffer(gfx_, m_lightsBuffer);
-                m_lightsBuffer = gfxCreateBuffer<Light>(gfx_, 1, &directionalLight);
-            }
-        }
-    }
-
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_DrawConstants", m_drawConstantsBuffer);
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_DrawDataBuffer", m_drawDataBuffer);
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsCountBuffer", m_lightsCountBuffer);
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LightsBuffer", m_lightsBuffer);
 
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_InstanceBuffer",
             capsaicin.getInstanceBuffer());
@@ -173,6 +150,9 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
             capsaicin.getLinearWrapSampler());
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler",
             capsaicin.getLinearSampler());
+
+        capsaicin.getComponent<CustomLightBuilder>()->addProgramParameters(
+            capsaicin, m_visibilityBufferProgram);
     }
 
     // Run the amplification shader.
@@ -195,8 +175,6 @@ void CustomVisibilityBuffer::terminate() noexcept
 {
     gfxDestroyKernel(gfx_, m_visibilityBufferKernel);
     gfxDestroyProgram(gfx_, m_visibilityBufferProgram);
-    gfxDestroyBuffer(gfx_, m_lightsBuffer);
-    gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
     gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
     gfxDestroyBuffer(gfx_, m_drawDataBuffer);
 }
