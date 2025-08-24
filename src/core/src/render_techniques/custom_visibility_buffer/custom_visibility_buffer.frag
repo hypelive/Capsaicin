@@ -67,7 +67,6 @@ float calculateGGXNormalDistribution(float NdotH, float alpha)
     return numerator / (denominator + FLT_EPSILON);
 }
 
-// TODO check if we need to replace alpha here.
 float calculateSchlickGGXGeometry(float NdotV, float alpha)
 {
     const float k = alpha / 2.0f;
@@ -136,8 +135,7 @@ float3 calculateIndirectLighting(MaterialEvaluated material, float3 normal, floa
     const float3 reflectionVector = reflect(-viewDirection, normal);
     const float3 prefilteredColor = g_PrefilteredEnvironmentMap.SampleLevel(g_LinearSampler, reflectionVector, prefilteredMapMip).rgb;
     const float2 brdf = g_BrdfLut.SampleLevel(g_LinearSampler, float2(VdotN, roughness), 0.0f).xy;
-    // TODO why multiply by Fresnel and not F0?
-    const float3 specular = prefilteredColor * (Fresnel * brdf.x + brdf.y);
+    const float3 specular = Fresnel * prefilteredColor * (F0 * brdf.x + brdf.y);
 
     // TODO add AO.
     return diffuse + specular;
