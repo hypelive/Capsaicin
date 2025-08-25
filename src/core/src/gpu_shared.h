@@ -133,7 +133,7 @@ struct Instance
 
 struct Material
 {
-    float4 albedo;     // .xyz = albedo, .w = albedo_map
+    float4 albedo;     // .xyz = albedo, .w = albedo_map (can contain alpha)
     float4 emissivity; // .xyz = emissivity, .w = emissivity_map
     float4
         metallicity_roughness; // .x = metallicity, .y = metallicity_map, .z = roughness, .w = roughness_map

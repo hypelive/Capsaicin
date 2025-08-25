@@ -185,5 +185,10 @@ void ProbeBaker::terminate() noexcept
 
 void ProbeBaker::addProgramParameters(
     [[maybe_unused]] CapsaicinInternal const &capsaicin,
-    [[maybe_unused]] GfxProgram const &       program) const noexcept {}
+    GfxProgram const &                        program) const noexcept
+{
+    gfxProgramSetParameter(gfx_, program, "g_IrradianceProbe", m_irradianceProbeTexture);
+    gfxProgramSetParameter(gfx_, program, "g_PrefilteredEnvironmentMap", m_prefilteredEnvironmentMap);
+    gfxProgramSetParameter(gfx_, program, "g_BrdfLut", m_brdfLut);
+}
 } // namespace Capsaicin

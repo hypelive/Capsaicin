@@ -18,14 +18,14 @@ bool CustomLightBuilder::init([[maybe_unused]] CapsaicinInternal const &capsaici
 
 void CustomLightBuilder::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    uint32_t const    lightsCount = gfxSceneGetLightCount(capsaicin.getScene());
-    auto const *const lights      = gfxSceneGetLights(capsaicin.getScene());
+    m_lightsCount            = gfxSceneGetLightCount(capsaicin.getScene());
+    auto const *const lights = gfxSceneGetLights(capsaicin.getScene());
 
     gfxDestroyBuffer(gfx_, m_lightsCountBuffer);
-    m_lightsCountBuffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &lightsCount);
+    m_lightsCountBuffer = gfxCreateBuffer<uint32_t>(gfx_, 1, &m_lightsCount);
     m_lightsCountBuffer.setName("Lights Count Buffer");
 
-    if (lightsCount > 0)
+    if (m_lightsCount > 0)
     {
         auto &firstLight = lights[0];
         if (firstLight.type == kGfxLightType_Directional)
@@ -51,6 +51,9 @@ void CustomLightBuilder::addProgramParameters(
     GfxProgram const &                        program) const noexcept
 {
     gfxProgramSetParameter(gfx_, program, "g_LightsCountBuffer", m_lightsCountBuffer);
-    gfxProgramSetParameter(gfx_, program, "g_LightsBuffer", m_lightsBuffer);
+    if (m_lightsCount)
+    {
+        gfxProgramSetParameter(gfx_, program, "g_LightsBuffer", m_lightsBuffer);
+    }
 }
 } // namespace Capsaicin

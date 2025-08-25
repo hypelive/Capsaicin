@@ -48,14 +48,6 @@ public:
      */
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
-    const GfxTexture &getIrradianceProbeTexture() const noexcept
-    {
-        return m_irradianceProbeTexture;
-    }
-
-    GfxTexture const &getPrefilteredEnvironmentMap() const noexcept { return m_prefilteredEnvironmentMap; }
-    GfxTexture const &getBrdfLut() const noexcept { return m_brdfLut; }
-
 private:
     GfxTexture m_irradianceProbeTexture;
     GfxTexture m_prefilteredEnvironmentMap;

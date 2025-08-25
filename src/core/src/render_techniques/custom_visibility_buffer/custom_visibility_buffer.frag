@@ -23,18 +23,26 @@ struct Pixel
     float4 color : SV_Target0;
 };
 
-float3 ambient(float3 normal)
+void handleAlpha(Material material, float2 uv)
 {
-    const float3 upVector = float3(0.0f, 1.0f, 0.0f);
-    const float3 downVector = float3(-0.0f, -1.0f, -0.0f);
+    // 0 - opaque, 1 - clip, 2 - blend.
+    // Don't support alpha blending here, we'll have dedicated transparency pass.
+    uint alphaBlendMode = asuint(material.normal_alpha_side.w);
+    if (alphaBlendMode != 0)
+    {
+        const float C_APHA_CLIP_THRESHOLD = 0.5f;
 
-    const float3 upRadiance = 0.3f * float3(0.1f, 0.1f, 0.0f);
-    const float3 downRadiance = 0.1f * float3(0.01f, 0.06f, 0.06f);
-
-    float upFactor = max(0.0f, dot(normal, upVector));
-    float downFactor = max(0.0f, dot(normal, downVector));
-
-    return upFactor * upRadiance + downFactor * downRadiance;
+        float alpha = material.normal_alpha_side.y;
+        uint alphaMapIndex = asuint(material.albedo.w);
+        if (alphaMapIndex != uint(-1))
+        {
+            alpha *= g_TextureMaps[NonUniformResourceIndex(alphaMapIndex)].Sample(g_LinearSampler, uv).a;
+        }
+        if (alpha < C_APHA_CLIP_THRESHOLD)
+        {
+            discard;
+        }
+    }
 }
 
 float3 tonemap(float3 radiance)
@@ -132,16 +140,18 @@ Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
     Pixel pixel;
 
     const float3 normal = normalize(params.normal);
+    // TODO buid tbn.
 
     Instance instance = g_InstanceBuffer[instanceID];
     Material material = g_MaterialBuffer[instance.material_index];
     MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, params.uv);
     MaterialBRDF materialBrdf = MakeMaterialBRDF(materialEvaluated);
 
+    handleAlpha(material, params.uv);
+
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
-    // TODO add indirect specular.
     float3 radiance = calculateDirectLighting(materialBrdf, normal, viewDirection) +
         calculateIndirectLighting(materialBrdf, normal, viewDirection);
 
