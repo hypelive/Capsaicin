@@ -16,6 +16,8 @@ struct VertexParams
 struct PrimParams
 {
     uint instanceID : INSTANCE_ID;
+    float3 tangent : TANGENT;
+    float3 bitangent : BITANGENT;
 };
 
 #define MESH_GROUP_SIZE 32

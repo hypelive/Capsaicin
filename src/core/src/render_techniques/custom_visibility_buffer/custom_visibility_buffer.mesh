@@ -14,6 +14,8 @@ uint g_VertexDataIndex;
 #define NUM_TRIS 64
 #define NUM_VERTS 64
 
+groupshared VertexParams lds_vertexParams[NUM_VERTS];
+
 [NumThreads(NUM_TRIS, 1, 1)]
 [OutputTopology("triangle")]
 void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPayload meshPayload,
@@ -51,6 +53,8 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         verts[gtid] = vertexParams;
     }
 
+    GroupMemoryBarrierWithGroupSync();
+
     if (gtid < triangleCount)
     {
         uint indiceIndex = dataIndex + vertexCount;
@@ -59,6 +63,26 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         uint3 unpackedIndices = uint3(packedIndices & 0x3F, (packedIndices >> 10) & 0x3F, packedIndices >> 20);
         tris[gtid] = unpackedIndices;
 
+        VertexParams v0 = lds_vertexParams[unpackedIndices.x];
+        VertexParams v1 = lds_vertexParams[unpackedIndices.y];
+        VertexParams v2 = lds_vertexParams[unpackedIndices.z];
+
+        float3 edge1 = v1.worldPosition - v0.worldPosition;
+        float3 edge2 = v2.worldPosition - v0.worldPosition;
+        float2 deltaUV1 = v1.uv - v0.uv;
+        float2 deltaUV2 = v2.uv - v0.uv;
+
+        float2x3 tangentBitangent = float2x3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+        float det = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
+        if (det != 0.0f)
+        {
+            float2x2 invUV = float2x2(deltaUV2.y, -deltaUV1.y, -deltaUV2.x, deltaUV1.x) / det;
+            float2x3 edges = float2x3(edge1, edge2);
+            float2x3 tangentBitangent = mul(invUV, edges);
+        }
+
+        prims[gtid].tangent = tangentBitangent[0];
+        prims[gtid].bitangent = tangentBitangent[1];
         prims[gtid].instanceID = instanceIndex;
     }
 }

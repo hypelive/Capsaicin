@@ -45,6 +45,26 @@ void handleAlpha(Material material, float2 uv)
     }
 }
 
+float3 calculateNormal(VertexParams params, PrimParams primitiveParams, Material material)
+{
+    float3 normal = normalize(params.normal);
+    uint normalMap = asuint(material.normal_alpha_side.x);
+    if (normalMap != uint(-1))
+    {
+        float3 tangent = normalize(primitiveParams.tangent);
+        tangent = normalize(tangent - dot(tangent, normal) * normal);
+        float3 bitangent = cross(normal, tangent);
+        bitangent = dot(bitangent, primitiveParams.bitangent) < 0.0f ? -bitangent : bitangent;
+        float3x3 TBN = float3x3(tangent.x, bitangent.x, normal.x,
+                                tangent.y, bitangent.y, normal.y,
+                                tangent.z, bitangent.z, normal.z);
+        float3 textureNormal = 2.0f * g_TextureMaps[NonUniformResourceIndex(normalMap)].Sample(g_LinearSampler, params.uv).xyz - 1.0f;
+        normal = normalize(mul(TBN, textureNormal));
+    }
+
+    return normal;
+}
+
 float3 tonemap(float3 radiance)
 {
     return radiance / (1.0f + radiance);
@@ -135,19 +155,18 @@ float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 vi
     return diffuse + specular;
 }
 
-Pixel main(in VertexParams params, in uint instanceID : INSTANCE_ID)
+Pixel main(in VertexParams params, in PrimParams primitiveParams)
 {
     Pixel pixel;
 
-    const float3 normal = normalize(params.normal);
-    // TODO buid tbn.
-
-    Instance instance = g_InstanceBuffer[instanceID];
+    Instance instance = g_InstanceBuffer[primitiveParams.instanceID];
     Material material = g_MaterialBuffer[instance.material_index];
     MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, params.uv);
     MaterialBRDF materialBrdf = MakeMaterialBRDF(materialEvaluated);
 
     handleAlpha(material, params.uv);
+
+    float3 normal = calculateNormal(params, primitiveParams, material);
 
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
