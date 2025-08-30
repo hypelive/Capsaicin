@@ -254,4 +254,17 @@ inline bool hasLightPosition(Light light)
 #endif
 }
 
+struct LightsBufferInfo
+{
+    uint directionalLightsCount;
+    uint pointLightsCount;
+    uint spotLightsCount;
+    uint areaLightsCount;
+
+    uint pointLightsOffset;
+    uint spotLightsOffset;
+    uint areaLightsOffset;
+    uint padding;
+};
+
 #endif

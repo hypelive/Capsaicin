@@ -8,7 +8,7 @@ SamplerState g_TextureSampler;
 #include "materials/materials.hlsl"
 
 StructuredBuffer<DrawConstants> g_DrawConstants;
-StructuredBuffer<uint> g_LightsCountBuffer;
+ConstantBuffer<LightsBufferInfo> g_LightsBufferInfo;
 StructuredBuffer<Light> g_LightsBuffer;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
@@ -107,20 +107,9 @@ float calculateSmithGeometry(float NdotV, float NdotL, float alpha)
     return calculateSchlickGGXGeometry(saturate(NdotV), alpha) * calculateSchlickGGXGeometry(saturate(NdotL), alpha);
 }
 
-// TODO support multiple lights.
 // https://graphicrants.blogspot.com/2013/08/specular-brdf-reference.html
-float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection)
+float3 calculateDirectRadianceForLight(MaterialBRDF material, float3 normal, float3 viewDirection, float3 lightDirection, float3 radiance)
 {
-    const uint lightsCount = g_LightsCountBuffer[0];
-    if (lightsCount == 0)
-    {
-        return float3(0.0f, 0.0f, 0.0f);
-    }
-
-    const LightDirectional directionalLight = MakeLightDirectional(g_LightsBuffer[0]);
-    const float3 lightDirection = directionalLight.direction;
-    const float3 irradiance = directionalLight.irradiance;
-
     const float3 halfVector = normalize(viewDirection + lightDirection);
 
     const float VdotH = dot(viewDirection, halfVector);
@@ -135,7 +124,67 @@ float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 view
     const float3 specular = (Fresnel * NDF * G) / 4.0f;
     const float3 diffuse = (1.0f - Fresnel) * material.albedo / PI;
 
-    return (specular + diffuse) * max(0.0f, NdotL) * irradiance;
+    return (specular + diffuse) * max(0.0f, NdotL) * radiance;
+}
+
+float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection, float3 cameraPosition, float3 worldPosition)
+{
+    float3 radiance = 0.0f;
+
+    // Evaluate directional lights.
+    for (uint lightIndex = 0u; lightIndex < g_LightsBufferInfo.directionalLightsCount; ++lightIndex)
+    {
+        const LightDirectional directionalLight = MakeLightDirectional(g_LightsBuffer[lightIndex]);
+        radiance += calculateDirectRadianceForLight(material, normal, viewDirection,
+            directionalLight.direction, directionalLight.irradiance);
+    }
+
+    // Evaluate point lights.
+    for (uint lightIndex = 0u; lightIndex < g_LightsBufferInfo.pointLightsCount; ++lightIndex)
+    {
+        const LightPoint pointLight = MakeLightPoint(g_LightsBuffer[g_LightsBufferInfo.pointLightsOffset + lightIndex]);
+        const float3 lightOffset = pointLight.position - worldPosition;
+        const float sqrDistance = dot(lightOffset, lightOffset);
+        if (sqrDistance > pointLight.range * pointLight.range)
+        {
+            continue;
+        }
+
+        const float attenuation = rcp(PI * sqrDistance);
+
+        radiance += attenuation * calculateDirectRadianceForLight(material, normal, viewDirection,
+            lightOffset / sqrt(sqrDistance), pointLight.intensity);
+    }
+    
+    // Evaluate spot lights.
+    for (uint lightIndex = 0u; lightIndex < g_LightsBufferInfo.spotLightsCount; ++lightIndex)
+    {
+        const LightSpot spotLight = MakeLightSpot(g_LightsBuffer[g_LightsBufferInfo.spotLightsOffset + lightIndex]);
+        const float3 lightOffset = spotLight.position - worldPosition;
+        const float sqrDistance = dot(lightOffset, lightOffset);
+        if (sqrDistance > spotLight.range * spotLight.range)
+        {
+            continue;
+        }
+
+        const float3 lightDirection = lightOffset / sqrt(sqrDistance);
+        const float cosTheta = dot(lightDirection, spotLight.direction);
+
+        const float distanceAttenuation = rcp(PI * sqrDistance);
+        float angleAttenuation = saturate(cosTheta * spotLight.angleCutoffScale + spotLight.angleCutoffOffset);
+        angleAttenuation *= angleAttenuation;
+        if (angleAttenuation <= 0.0f)
+        {
+            continue;
+        }
+
+        radiance += distanceAttenuation * angleAttenuation * calculateDirectRadianceForLight(material, normal, viewDirection,
+            lightDirection, spotLight.intensity);
+    }
+
+    // TODO Evaluate area lights.
+
+    return radiance;
 }
 
 float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection)
@@ -171,7 +220,7 @@ Pixel main(in VertexParams params, in PrimParams primitiveParams)
     const float3 cameraPosition = g_DrawConstants[0].cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - params.worldPosition);
 
-    float3 radiance = calculateDirectLighting(materialBrdf, normal, viewDirection) +
+    float3 radiance = calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, params.worldPosition) +
         calculateIndirectLighting(materialBrdf, normal, viewDirection);
 
 #if 0

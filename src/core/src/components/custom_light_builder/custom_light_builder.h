@@ -49,8 +49,8 @@ public:
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
 private:
-    uint32_t  m_lightsCount = 0u;
-    GfxBuffer m_lightsCountBuffer;
-    GfxBuffer m_lightsBuffer;
+    GfxBuffer          m_gpuLightsBufferInfo;
+    GfxBuffer          m_gpuLightsBuffer;
+    std::vector<Light> m_cpuLightsBuffer;
 };
 } // namespace Capsaicin

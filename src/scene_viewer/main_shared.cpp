@@ -88,6 +88,12 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     {          .name                 = "RoughnessMetallicSpheres",
      .fileName          = {"assets/CapsaicinTestMedia/RoughnessMetallicSpheres/RoughnessMetallicSpheres.glb"},
      .useEnvironmentMap = true},
+    { .name        = "NormalMapPlanes",
+     .fileName = {"assets/CapsaicinTestMedia/NormalMapPlanes/NormalMapPlanes.glb"},
+     .useEnvironmentMap = true},
+    { .name                 = "LightSources",
+     .fileName          = {"assets/CapsaicinTestMedia/LightSources/LightSources.glb"},
+     .useEnvironmentMap = false},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {
