@@ -169,9 +169,13 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 void CustomVisibilityBuffer::terminate() noexcept
 {
     gfxDestroyKernel(gfx_, m_visibilityBufferKernel);
+    m_visibilityBufferKernel = {};
     gfxDestroyProgram(gfx_, m_visibilityBufferProgram);
+    m_visibilityBufferProgram = {};
     gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
+    m_drawConstantsBuffer = {};
     gfxDestroyBuffer(gfx_, m_drawDataBuffer);
+    m_drawDataBuffer = {};
 }
 
 void CustomVisibilityBuffer::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }

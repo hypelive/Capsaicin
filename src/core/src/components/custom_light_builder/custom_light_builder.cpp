@@ -87,7 +87,9 @@ void CustomLightBuilder::run([[maybe_unused]] CapsaicinInternal &capsaicin) noex
 void CustomLightBuilder::terminate() noexcept
 {
     gfxDestroyBuffer(gfx_, m_gpuLightsBufferInfo);
+    m_gpuLightsBufferInfo = {};
     gfxDestroyBuffer(gfx_, m_gpuLightsBuffer);
+    m_gpuLightsBuffer = {};
 }
 
 void CustomLightBuilder::addProgramParameters(

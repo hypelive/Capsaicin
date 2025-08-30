@@ -106,7 +106,9 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
 void CustomSkybox::terminate() noexcept
 {
     gfxDestroyKernel(gfx_, m_skyboxKernel);
+    m_skyboxKernel = {};
     gfxDestroyProgram(gfx_, m_skyboxProgram);
+    m_skyboxProgram = {};
 }
 
 void CustomSkybox::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }

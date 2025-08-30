@@ -70,12 +70,13 @@ bool ProbeBaker::init(CapsaicinInternal const &capsaicin) noexcept
         gfxDestroyProgram(gfx_, brdfLutBakerProgram);
     }
 
+    m_baked = false;
     return m_irradianceBakerKernel && m_prefilteredEnvironmentBakerKernel;
 }
 
 void ProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    if (!capsaicin.getEnvironmentMapUpdated())
+    if (!capsaicin.getEnvironmentMapUpdated() && m_baked)
     {
         return;
     }
@@ -169,18 +170,28 @@ void ProbeBaker::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
             }
         }
     }
+
+    m_baked = true;
 }
 
 void ProbeBaker::terminate() noexcept
 {
     gfxDestroyTexture(gfx_, m_brdfLut);
+    m_brdfLut = {};
     gfxDestroyTexture(gfx_, m_irradianceProbeTexture);
+    m_irradianceProbeTexture = {};
     gfxDestroyTexture(gfx_, m_prefilteredEnvironmentMap);
+    m_prefilteredEnvironmentMap = {};
     gfxDestroyBuffer(gfx_, m_drawConstants);
+    m_drawConstants = {};
     gfxDestroyKernel(gfx_, m_prefilteredEnvironmentBakerKernel);
+    m_prefilteredEnvironmentBakerKernel = {};
     gfxDestroyProgram(gfx_, m_prefilteredEnvironmentBakerProgram);
+    m_prefilteredEnvironmentBakerProgram = {};
     gfxDestroyKernel(gfx_, m_irradianceBakerKernel);
+    m_irradianceBakerKernel = {};
     gfxDestroyProgram(gfx_, m_irradianceBakerProgram);
+    m_irradianceBakerProgram = {};
 }
 
 void ProbeBaker::addProgramParameters(

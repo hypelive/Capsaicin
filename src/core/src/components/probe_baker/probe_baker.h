@@ -57,5 +57,6 @@ private:
     GfxKernel  m_irradianceBakerKernel;
     GfxProgram m_prefilteredEnvironmentBakerProgram;
     GfxKernel  m_prefilteredEnvironmentBakerKernel;
+    bool       m_baked = false;
 };
 } // namespace Capsaicin
