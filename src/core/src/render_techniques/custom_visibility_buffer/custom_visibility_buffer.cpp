@@ -30,8 +30,6 @@ CustomVisibilityBuffer::RenderOptions CustomVisibilityBuffer::convertOptions(
 ComponentList CustomVisibilityBuffer::getComponents() const noexcept
 {
     ComponentList components;
-    components.emplace_back("ProbeBaker");
-    components.emplace_back("CustomLightBuilder");
     return components;
 }
 
@@ -46,8 +44,9 @@ SharedBufferList CustomVisibilityBuffer::getSharedBuffers() const noexcept
 SharedTextureList CustomVisibilityBuffer::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::Write});
-    textures.push_back({"Depth", SharedTexture::Access::ReadWrite});
+    textures.push_back({"VisibilityBuffer", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
+                        DXGI_FORMAT_R32_UINT});
+    textures.push_back({"Depth", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Clear});
     return textures;
 }
 
@@ -67,7 +66,7 @@ bool CustomVisibilityBuffer::init([[maybe_unused]] CapsaicinInternal const &caps
     gfxDrawStateSetDepthFunction(visibilityBufferDrawState, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
-        visibilityBufferDrawState, 0, capsaicin.getSharedTexture("Color").getFormat());
+        visibilityBufferDrawState, 0, capsaicin.getSharedTexture("VisibilityBuffer").getFormat());
     gfxDrawStateSetDepthStencilTarget(
         visibilityBufferDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
@@ -108,13 +107,12 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
 
     // Filling the draw constants.
     {
-        DrawConstants drawConstants  = {};
+        VisibilityBufferConstants drawConstants  = {};
         drawConstants.viewProjection = capsaicin.getCameraMatrices().view_projection;
-        drawConstants.cameraPosition = capsaicin.getCamera().eye;
         drawConstants.drawCount      = m_drawDataSize;
 
         gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
-        m_drawConstantsBuffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &drawConstants);
+        m_drawConstantsBuffer = gfxCreateBuffer<VisibilityBufferConstants>(gfx_, 1, &drawConstants);
     }
 
     // Set the root parameters.
@@ -140,23 +138,14 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureMaps", textures.data(),
             static_cast<uint32_t>(textures.size()));
-        gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_TextureSampler",
-            capsaicin.getLinearWrapSampler());
         gfxProgramSetParameter(gfx_, m_visibilityBufferProgram, "g_LinearSampler",
             capsaicin.getLinearSampler());
-
-        capsaicin.getComponent<ProbeBaker>()->addProgramParameters(capsaicin, m_visibilityBufferProgram);
-        capsaicin.getComponent<CustomLightBuilder>()->addProgramParameters(
-            capsaicin, m_visibilityBufferProgram);
     }
 
     // Run the amplification shader.
     {
-        gfxCommandClearTexture(gfx_, capsaicin.getSharedTexture("Depth"));
-        gfxCommandClearTexture(gfx_, capsaicin.getSharedTexture("Color"));
-
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
-        gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("Color"));
+        gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("VisibilityBuffer"));
         gfxCommandBindKernel(gfx_, m_visibilityBufferKernel);
 
         uint32_t const *num_threads  = gfxKernelGetNumThreads(gfx_, m_visibilityBufferKernel);

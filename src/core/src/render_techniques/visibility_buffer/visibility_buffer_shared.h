@@ -61,7 +61,7 @@ struct DrawData
     uint instanceIndex;
 };
 
-struct DrawConstants
+struct VisibilityBufferConstants
 {
     float3   cameraPosition;
     uint     drawCount;

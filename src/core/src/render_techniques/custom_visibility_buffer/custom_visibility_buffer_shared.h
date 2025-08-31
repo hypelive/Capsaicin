@@ -8,16 +8,12 @@
 struct VertexParams
 {
     float4 screenPosition : SV_Position;
-    float3 normal : NORMAL;
     float2 uv : TEXCOORD;
-    float3 worldPosition : POSITION0;
 };
 
 struct PrimParams
 {
-    uint instanceID : INSTANCE_ID;
-    float3 tangent : TANGENT;
-    float3 bitangent : BITANGENT;
+    uint packedInstancePrimitive : INSTANCE_PRIMITIVE_ID;
 };
 
 #define MESH_GROUP_SIZE 32
@@ -30,10 +26,9 @@ struct MeshPayload
 #endif
 
 // TODO rename this to avoid type shuffle.
-struct DrawConstants
+struct VisibilityBufferConstants
 {
     float4x4 viewProjection;
-    float3   cameraPosition; 
     uint drawCount;
 };
 

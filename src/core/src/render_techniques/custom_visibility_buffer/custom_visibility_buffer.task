@@ -1,12 +1,9 @@
 #include "custom_visibility_buffer_shared.h"
-
 #include "math/transform.hlsl"
 #include "math/pack.hlsl"
 
-StructuredBuffer<DrawConstants> g_DrawConstants;
+StructuredBuffer<VisibilityBufferConstants> g_DrawConstants;
 StructuredBuffer<DrawData> g_DrawDataBuffer;
-StructuredBuffer<Instance> g_InstanceBuffer;
-StructuredBuffer<float3x4> g_TransformBuffer;
 
 groupshared MeshPayload meshPayload;
 

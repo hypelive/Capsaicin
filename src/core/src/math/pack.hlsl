@@ -644,4 +644,15 @@ void Store4(in RWStructuredBuffer<uint> buffer, in uint index, in uint4 value)
     buffer[4 * index + 3] = value.w;
 }
 
+uint packVisibilityBuffer(uint instanceID, uint primitiveID)
+{
+    return (instanceID << 16) | (primitiveID & 0xFFFF);
+}
+
+// Returns instanceID in x and primitiveID in y.
+uint2 unpackVisibilityBuffer(uint packedInstancePrimitive)
+{
+    return uint2(packedInstancePrimitive >> 16, packedInstancePrimitive & 0xFFFF);
+}
+
 #endif // PACK_HLSL

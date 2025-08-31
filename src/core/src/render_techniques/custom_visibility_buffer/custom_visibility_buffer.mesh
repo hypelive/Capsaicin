@@ -1,8 +1,8 @@
 #include "custom_visibility_buffer_shared.h"
-
 #include "math/transform.hlsl"
+#include "math/pack.hlsl"
 
-StructuredBuffer<DrawConstants> g_DrawConstants;
+StructuredBuffer<VisibilityBufferConstants> g_DrawConstants;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<float3x4> g_TransformBuffer;
 StructuredBuffer<Meshlet> g_MeshletBuffer;
@@ -13,8 +13,6 @@ uint g_VertexDataIndex;
 
 #define NUM_TRIS 64
 #define NUM_VERTS 64
-
-groupshared VertexParams lds_vertexParams[NUM_VERTS];
 
 [NumThreads(NUM_TRIS, 1, 1)]
 [OutputTopology("triangle")]
@@ -42,18 +40,13 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         Vertex vertex = g_VertexBuffer[vertexIndex];
 
         float3 worldPosition = transformPoint(vertex.getPosition(), transform);
-        float3 normal = transformNormal(vertex.getNormal(), transform);
 
         VertexParams vertexParams;
         vertexParams.screenPosition = mul(g_DrawConstants[0].viewProjection, float4(worldPosition, 1.0f));
-        vertexParams.worldPosition = worldPosition;
         vertexParams.uv = vertex.getUV();
-        vertexParams.normal = normal;
 
         verts[gtid] = vertexParams;
     }
-
-    GroupMemoryBarrierWithGroupSync();
 
     if (gtid < triangleCount)
     {
@@ -63,26 +56,6 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         uint3 unpackedIndices = uint3(packedIndices & 0x3F, (packedIndices >> 10) & 0x3F, packedIndices >> 20);
         tris[gtid] = unpackedIndices;
 
-        VertexParams v0 = lds_vertexParams[unpackedIndices.x];
-        VertexParams v1 = lds_vertexParams[unpackedIndices.y];
-        VertexParams v2 = lds_vertexParams[unpackedIndices.z];
-
-        float3 edge1 = v1.worldPosition - v0.worldPosition;
-        float3 edge2 = v2.worldPosition - v0.worldPosition;
-        float2 deltaUV1 = v1.uv - v0.uv;
-        float2 deltaUV2 = v2.uv - v0.uv;
-
-        float2x3 tangentBitangent = float2x3(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
-        float det = deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y;
-        if (det != 0.0f)
-        {
-            float2x2 invUV = float2x2(deltaUV2.y, -deltaUV1.y, -deltaUV2.x, deltaUV1.x) / det;
-            float2x3 edges = float2x3(edge1, edge2);
-            float2x3 tangentBitangent = mul(invUV, edges);
-        }
-
-        prims[gtid].tangent = tangentBitangent[0];
-        prims[gtid].bitangent = tangentBitangent[1];
-        prims[gtid].instanceID = instanceIndex;
+        prims[gtid].packedInstancePrimitive = packVisibilityBuffer(instanceIndex, gtid);
     }
 }

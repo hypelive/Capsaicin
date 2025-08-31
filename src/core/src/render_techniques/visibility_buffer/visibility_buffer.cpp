@@ -185,7 +185,7 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
         }
 
         {
-            DrawConstants constants;
+            VisibilityBufferConstants constants;
             auto const   &vp           = transpose(cameraMatrices.view_projection);
             constants.cameraFrustum[0] = (vp[3] + vp[0]); // left
             constants.cameraFrustum[0] /= length(float3(constants.cameraFrustum[0]));
@@ -210,7 +210,7 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
                 float2(cameraMatrices.projection[0][0], cameraMatrices.projection[1][1]);
             constants.view = cameraMatrices.view;
             gfxDestroyBuffer(gfx_, constants_buffer);
-            constants_buffer = gfxCreateBuffer<DrawConstants>(gfx_, 1, &constants);
+            constants_buffer = gfxCreateBuffer<VisibilityBufferConstants>(gfx_, 1, &constants);
         }
     }
 
