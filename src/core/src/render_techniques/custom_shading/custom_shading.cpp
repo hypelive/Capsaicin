@@ -83,6 +83,7 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
     {
         ShadingConstants drawConstants = {};
         drawConstants.viewProjection   = capsaicin.getCameraMatrices().view_projection;
+        drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
         drawConstants.cameraPosition   = capsaicin.getCamera().eye;
         drawConstants.invScreenSize    = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
@@ -117,8 +118,6 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
             capsaicin.getLinearWrapSampler());
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_LinearSampler",
             capsaicin.getLinearSampler());
-        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_NearestSampler",
-            capsaicin.getNearestSampler());
 
         capsaicin.getComponent<ProbeBaker>()->addProgramParameters(capsaicin, m_shadingProgram);
         capsaicin.getComponent<CustomLightBuilder>()->addProgramParameters(capsaicin, m_shadingProgram);

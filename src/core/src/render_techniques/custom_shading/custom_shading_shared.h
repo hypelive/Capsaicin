@@ -15,6 +15,7 @@ struct VertexParams
 struct ShadingConstants
 {
     float4x4 viewProjection;
+    float4x4 invViewProjection;
     float3   cameraPosition;
     uint     padding;
     float2   invScreenSize;

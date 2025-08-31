@@ -40,7 +40,7 @@ Pixel main(in VertexParams params, in PrimParams primitiveParams)
 {
     Pixel pixel;
 
-    Instance instance = g_InstanceBuffer[unpackVisibilityBuffer(primitiveParams.packedInstancePrimitive).x];
+    Instance instance = g_InstanceBuffer[unpackVisibilityBuffer(primitiveParams.packedInstancePrimitive).instanceId];
     Material material = g_MaterialBuffer[instance.material_index];
 
     handleAlpha(material, params.uv);
