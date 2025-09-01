@@ -11,7 +11,7 @@ StructuredBuffer<Material> g_MaterialBuffer;
 
 struct Pixel
 {
-    uint packedInstancePrimitive : SV_Target0;
+    uint2 packedInstancePrimitive : SV_Target0;
 };
 
 void handleAlpha(Material material, float2 uv)

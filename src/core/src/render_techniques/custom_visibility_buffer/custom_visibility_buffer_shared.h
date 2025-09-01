@@ -13,7 +13,7 @@ struct VertexParams
 
 struct PrimParams
 {
-    uint packedInstancePrimitive : INSTANCE_PRIMITIVE_ID;
+    uint2 packedInstancePrimitive : INSTANCE_PRIMITIVE_ID;
 };
 
 #define MESH_GROUP_SIZE 32

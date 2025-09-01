@@ -644,10 +644,10 @@ void Store4(in RWStructuredBuffer<uint> buffer, in uint index, in uint4 value)
     buffer[4 * index + 3] = value.w;
 }
 
-// instanceID is 16 bits, meshletID is 10 bits, primitiveID is 6 bits.
-uint packVisibilityBuffer(uint instanceId, uint meshletId, uint primitiveId)
+// instanceID is 32 bits, meshletID is 24 bits, primitiveID is 8 bits.
+uint2 packVisibilityBuffer(uint instanceId, uint meshletId, uint primitiveId)
 {
-    return (instanceId << 16) | ((meshletId & 0x3FF) << 6) | (primitiveId & 0x3F);
+    return uint2(instanceId, ((meshletId & 0xFFFFFF) << 8) | (primitiveId & 0xFF));
 }
 
 struct UnpackedVisibilityBuffer
@@ -657,12 +657,12 @@ struct UnpackedVisibilityBuffer
     uint primitiveId;
 };
 
-UnpackedVisibilityBuffer unpackVisibilityBuffer(uint packedInstancePrimitive)
+UnpackedVisibilityBuffer unpackVisibilityBuffer(uint2 packedInstancePrimitive)
 {
     UnpackedVisibilityBuffer result;
-    result.instanceId = packedInstancePrimitive >> 16;
-    result.meshletId = (packedInstancePrimitive >> 6) & 0x3FF;
-    result.primitiveId = packedInstancePrimitive & 0x3F;
+    result.instanceId = packedInstancePrimitive.x;
+    result.meshletId = packedInstancePrimitive.y >> 8;
+    result.primitiveId = packedInstancePrimitive.y & 0xFF;
     return result;
 }
 

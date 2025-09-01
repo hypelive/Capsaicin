@@ -11,7 +11,7 @@ SamplerState g_TextureSampler;
 #include "materials/materials.hlsl"
 
 ConstantBuffer<ShadingConstants> g_DrawConstants;
-Texture2D<uint> g_VisibilityBuffer;
+Texture2D<uint2> g_VisibilityBuffer;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<float3x4> g_TransformBuffer;
 StructuredBuffer<Meshlet> g_MeshletBuffer;

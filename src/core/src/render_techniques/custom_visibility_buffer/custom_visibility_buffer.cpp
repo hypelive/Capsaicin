@@ -45,7 +45,7 @@ SharedTextureList CustomVisibilityBuffer::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
     textures.push_back({"VisibilityBuffer", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R32_UINT});
+                        DXGI_FORMAT_R32G32_UINT});
     textures.push_back({"Depth", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Clear});
     return textures;
 }
