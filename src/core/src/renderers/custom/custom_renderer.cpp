@@ -2,6 +2,8 @@
 #include "custom_shading/custom_shading.h"
 #include "custom_visibility_buffer/custom_visibility_buffer.h"
 #include "custom_skybox/custom_skybox.h"
+#include "custom_visibility_to_gbuffer/custom_visibility_to_gbuffer.h"
+#include "depth_copy/depth_copy.h"
 
 namespace Capsaicin
 {
@@ -27,6 +29,8 @@ public:
     {
         std::vector<std::unique_ptr<RenderTechnique>> render_techniques;
         render_techniques.emplace_back(std::make_unique<CustomVisibilityBuffer>());
+        render_techniques.emplace_back(std::make_unique<DepthCopy>());
+        render_techniques.emplace_back(std::make_unique<CustomVisibilityToGBuffer>());
         render_techniques.emplace_back(std::make_unique<CustomShading>());
         render_techniques.emplace_back(std::make_unique<CustomSkybox>());
         return render_techniques;

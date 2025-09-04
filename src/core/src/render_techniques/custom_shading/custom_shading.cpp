@@ -44,9 +44,11 @@ SharedBufferList CustomShading::getSharedBuffers() const noexcept
 SharedTextureList CustomShading::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"VisibilityBuffer", SharedTexture::Access::Read, SharedTexture::Flags::None,
-                        DXGI_FORMAT_R32G32_UINT});
-    textures.push_back({"Depth", SharedTexture::Access::Read, SharedTexture::Flags::None});
+    textures.push_back({"GBuffer0", SharedTexture::Access::Read});
+    textures.push_back({"GBuffer1", SharedTexture::Access::Read});
+    textures.push_back({"GBuffer2", SharedTexture::Access::Read});
+    textures.push_back({"DepthCopy", SharedTexture::Access::Read});
+    textures.push_back({"Depth", SharedTexture::Access::Read});
     return textures;
 }
 
@@ -81,11 +83,11 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
 
     auto const &gpuDrawConstants = capsaicin.allocateConstantBuffer<ShadingConstants>(1);
     {
-        ShadingConstants drawConstants = {};
-        drawConstants.viewProjection   = capsaicin.getCameraMatrices().view_projection;
+        ShadingConstants drawConstants  = {};
+        drawConstants.viewProjection    = capsaicin.getCameraMatrices().view_projection;
         drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
-        drawConstants.cameraPosition   = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize    = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
+        drawConstants.cameraPosition    = capsaicin.getCamera().eye;
+        drawConstants.invScreenSize     = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
         gfxBufferGetData<ShadingConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
@@ -108,8 +110,14 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
             capsaicin.getVertexDataIndex());
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_MaterialBuffer",
             capsaicin.getMaterialBuffer());
-        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_VisibilityBuffer",
-            capsaicin.getSharedTexture("VisibilityBuffer"));
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_GBuffer0",
+            capsaicin.getSharedTexture("GBuffer0"));
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_GBuffer1",
+            capsaicin.getSharedTexture("GBuffer1"));
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_GBuffer2",
+            capsaicin.getSharedTexture("GBuffer2"));
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_DepthCopy",
+            capsaicin.getSharedTexture("DepthCopy"));
 
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_TextureMaps", textures.data(),
@@ -123,7 +131,6 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
         capsaicin.getComponent<CustomLightBuilder>()->addProgramParameters(capsaicin, m_shadingProgram);
     }
 
-    // Run the amplification shader.
     {
         gfxCommandBindColorTarget(gfx_, 0, colorTexture);
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
