@@ -30,8 +30,8 @@ uint g_VertexDataIndex;
 struct GBuffer
 {
     float4 albedo : SV_Target0;
-    float4 normalRoughnessMetallicity : SV_Target1;
-    float4 emission : SV_Target2;
+    float4 normalXYRoughnessMetallicity : SV_Target1;
+    float4 emissionNormalZ : SV_Target2;
 };
 
 struct ShadedVertex
@@ -180,12 +180,12 @@ GBuffer main(in VertexParams params)
     float3 tangent, bitangent;
     calculateTangentBitangent(vertex0, vertex1, vertex2, tangent, bitangent);
     float3 normal = calculateNormal(interpolants, tangent, bitangent, material);
-    float2 packedNormal = normal.xy * 0.5f + 0.5f;
+    float3 packedNormal = normal * 0.5f + 0.5f;
 
     GBuffer gBuffer;
     gBuffer.albedo = float4(materialEvaluated.albedo, 0.0f);
-    gBuffer.normalRoughnessMetallicity = float4(packedNormal, materialEvaluated.roughness, materialEvaluated.metallicity);
-    gBuffer.emission = float4(calculateEmission(material, interpolants.uv), 0.0f);
+    gBuffer.normalXYRoughnessMetallicity = float4(packedNormal.xy, materialEvaluated.roughness, materialEvaluated.metallicity);
+    gBuffer.emissionNormalZ = float4(calculateEmission(material, interpolants.uv), packedNormal.z);
 
     return gBuffer;
 }

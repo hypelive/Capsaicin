@@ -46,13 +46,13 @@ SharedTextureList CustomVisibilityToGBuffer::getSharedTextures() const noexcept
     // TODO pack derivatives
     // Albedo, ?
     textures.push_back({"GBuffer0", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R16G16B16A16_SNORM});
+                        DXGI_FORMAT_R16G16B16A16_UNORM});
     // NormalXY, roughness, metallic
     textures.push_back({"GBuffer1", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R16G16B16A16_SNORM});
+                        DXGI_FORMAT_R16G16B16A16_UNORM});
     // Emissive, ?
     textures.push_back({"GBuffer2", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R16G16B16A16_SNORM});
+                        DXGI_FORMAT_R16G16B16A16_UNORM});
     return textures;
 }
 
