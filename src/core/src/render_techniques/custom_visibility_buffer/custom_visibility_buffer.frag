@@ -27,7 +27,7 @@ void handleAlpha(Material material, float2 uv)
         uint alphaMapIndex = asuint(material.albedo.w);
         if (alphaMapIndex != uint(-1))
         {
-            alpha *= g_TextureMaps[NonUniformResourceIndex(alphaMapIndex)].Sample(g_LinearSampler, uv).a;
+            alpha *= g_TextureMaps[NonUniformResourceIndex(alphaMapIndex)].SampleLevel(g_LinearSampler, uv, 0.0f).a;
         }
         if (alpha < C_APHA_CLIP_THRESHOLD)
         {

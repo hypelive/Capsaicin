@@ -121,7 +121,7 @@ float3 calculateNormal(ShadedVertex params, float3 tangent, float3 bitangent, Ma
         float3x3 TBN = float3x3(tangent.x, newBitangent.x, normal.x,
                                 tangent.y, newBitangent.y, normal.y,
                                 tangent.z, newBitangent.z, normal.z);
-        float3 textureNormal = 2.0f * g_TextureMaps[NonUniformResourceIndex(normalMap)].Sample(g_LinearSampler, params.uv).xyz - 1.0f;
+        float3 textureNormal = 2.0f * g_TextureMaps[NonUniformResourceIndex(normalMap)].SampleLevel(g_LinearSampler, params.uv, 0.0f).xyz - 1.0f;
         normal = normalize(mul(TBN, textureNormal));
     }
 
@@ -267,6 +267,19 @@ float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 vi
     return diffuse + specular;
 }
 
+float3 calculateEmissive(Material material, float2 uv)
+{
+    // TODO scale with alpha?
+    float3 result = material.emissivity.xyz;
+    uint emissivityTextureId = asuint(material.emissivity.w);
+    if (emissivityTextureId != asuint(-1))
+    {
+        result *= g_TextureMaps[NonUniformResourceIndex(emissivityTextureId)].SampleLevel(g_LinearSampler, uv, 0.0f).xyz;
+    }
+
+    return result;        
+}
+
 Pixel main(in VertexParams params)
 {
     Pixel pixel;
@@ -299,7 +312,6 @@ Pixel main(in VertexParams params)
     float3 barycentrics = computeBarycentrics(g_DrawConstants.cameraPosition.xyz, cameraViewDirection,
         vertex0.worldPosition, vertex1.worldPosition, vertex2.worldPosition);
     ShadedVertex interpolants = computeInterpolants(barycentrics, vertex0, vertex1, vertex2);
-    // TODO something is wrong with interpolants. Debug.
 
     Material material = g_MaterialBuffer[instance.material_index];
     MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, interpolants.uv);
@@ -312,8 +324,9 @@ Pixel main(in VertexParams params)
     const float3 cameraPosition = g_DrawConstants.cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - interpolants.worldPosition);
 
-    float3 radiance = calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, interpolants.worldPosition) +
-        calculateIndirectLighting(materialBrdf, normal, viewDirection);    
+    float3 radiance = calculateEmissive(material, interpolants.uv) +
+        calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, interpolants.worldPosition) +
+        calculateIndirectLighting(materialBrdf, normal, viewDirection);
 
     float3 color = tonemap(radiance);
     color = applyInverseGamma(color);
