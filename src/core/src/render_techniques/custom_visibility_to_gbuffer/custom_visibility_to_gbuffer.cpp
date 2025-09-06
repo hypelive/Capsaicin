@@ -43,10 +43,10 @@ SharedTextureList CustomVisibilityToGBuffer::getSharedTextures() const noexcept
     textures.push_back({"VisibilityBuffer", SharedTexture::Access::Read, SharedTexture::Flags::None,
                         DXGI_FORMAT_R32G32_UINT});
     textures.push_back({"Depth", SharedTexture::Access::Read, SharedTexture::Flags::None});
-    // Albedo, NormalZ
+    // Albedo, metallic
     textures.push_back({"GBuffer0", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
                         DXGI_FORMAT_R8G8B8A8_UNORM});
-    // NormalXY, roughness, metallic
+    // Normal, roughness
     textures.push_back({"GBuffer1", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
                         DXGI_FORMAT_R16G16B16A16_UNORM});
     // Emissive, ?

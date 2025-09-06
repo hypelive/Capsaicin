@@ -29,8 +29,8 @@ uint g_VertexDataIndex;
 
 struct GBuffer
 {
-    float4 albedoNormalZ : SV_Target0;
-    float4 normalXYRoughnessMetallicity : SV_Target1;
+    float4 albedoMetallicity : SV_Target0;
+    float4 normalRoughness : SV_Target1;
     float4 emission : SV_Target2;
 };
 
@@ -211,8 +211,8 @@ GBuffer main(in VertexParams params)
     float3 packedNormal = normal * 0.5f + 0.5f;
 
     GBuffer gBuffer;
-    gBuffer.albedoNormalZ = float4(materialEvaluated.albedo, packedNormal.z);
-    gBuffer.normalXYRoughnessMetallicity = float4(packedNormal.xy, materialEvaluated.roughness, materialEvaluated.metallicity);
+    gBuffer.albedoMetallicity = float4(materialEvaluated.albedo, materialEvaluated.metallicity);
+    gBuffer.normalRoughness = float4(packedNormal, materialEvaluated.roughness);
     gBuffer.emission = float4(calculateEmission(material, interpolants.uv, duvdx, duvdy), 0.0f);
 
     return gBuffer;

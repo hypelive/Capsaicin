@@ -168,16 +168,16 @@ float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 vi
 
 struct GBufferData
 {
-    float4 albedoNormalZ;
-    float4 normalXYRoughnessMetallicity;
+    float4 albedoMetallicity;
+    float4 normalRoughness;
     float4 emission;
 };
 
 GBufferData readGBuffer(float2 texelCoordinates)
 {
     GBufferData data;
-    data.albedoNormalZ = g_GBuffer0.Load(int3(texelCoordinates, 0));
-    data.normalXYRoughnessMetallicity = g_GBuffer1.Load(int3(texelCoordinates, 0));
+    data.albedoMetallicity = g_GBuffer0.Load(int3(texelCoordinates, 0));
+    data.normalRoughness = g_GBuffer1.Load(int3(texelCoordinates, 0));
     data.emission = g_GBuffer2.Load(int3(texelCoordinates, 0));
 
     return data;
@@ -191,12 +191,12 @@ Pixel main(in VertexParams params)
     GBufferData gBuffer = readGBuffer(params.screenPosition.xy);
 
     MaterialEvaluated materialEvaluated;
-    materialEvaluated.albedo = gBuffer.albedoNormalZ.xyz;
-    materialEvaluated.metallicity = gBuffer.normalXYRoughnessMetallicity.w;
-    materialEvaluated.roughness = gBuffer.normalXYRoughnessMetallicity.z;
+    materialEvaluated.albedo = gBuffer.albedoMetallicity.xyz;
+    materialEvaluated.metallicity = gBuffer.albedoMetallicity.w;
+    materialEvaluated.roughness = gBuffer.normalRoughness.w;
     MaterialBRDF materialBrdf = MakeMaterialBRDF(materialEvaluated);
 
-    float3 normal = float3(gBuffer.normalXYRoughnessMetallicity.xy, gBuffer.albedoNormalZ.w) * 2.0f - 1.0f;
+    float3 normal = gBuffer.normalRoughness.xyz * 2.0f - 1.0f;
     normal = normalize(normal);
 
     float pixelDepth = g_DepthCopy.Load(int3(params.screenPosition.xy, 0));
