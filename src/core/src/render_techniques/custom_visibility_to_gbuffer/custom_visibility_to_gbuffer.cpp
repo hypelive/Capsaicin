@@ -43,16 +43,15 @@ SharedTextureList CustomVisibilityToGBuffer::getSharedTextures() const noexcept
     textures.push_back({"VisibilityBuffer", SharedTexture::Access::Read, SharedTexture::Flags::None,
                         DXGI_FORMAT_R32G32_UINT});
     textures.push_back({"Depth", SharedTexture::Access::Read, SharedTexture::Flags::None});
-    // TODO pack derivatives
-    // Albedo, ?
+    // Albedo, NormalZ
     textures.push_back({"GBuffer0", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R16G16B16A16_UNORM});
+                        DXGI_FORMAT_R8G8B8A8_UNORM});
     // NormalXY, roughness, metallic
     textures.push_back({"GBuffer1", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
                         DXGI_FORMAT_R16G16B16A16_UNORM});
     // Emissive, ?
     textures.push_back({"GBuffer2", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-                        DXGI_FORMAT_R16G16B16A16_UNORM});
+                        DXGI_FORMAT_R16G16B16A16_FLOAT});
     return textures;
 }
 
@@ -89,10 +88,10 @@ void CustomVisibilityToGBuffer::render([[maybe_unused]] CapsaicinInternal &capsa
     auto const &gpuDrawConstants = capsaicin.allocateConstantBuffer<VisibilityToGbufferConstants>(1);
     {
         VisibilityToGbufferConstants drawConstants = {};
-        drawConstants.viewProjection    = capsaicin.getCameraMatrices().view_projection;
-        drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
-        drawConstants.cameraPosition    = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize     = 1.0f / float2{gBuffer0.getWidth(), gBuffer0.getHeight()};
+        drawConstants.viewProjection               = capsaicin.getCameraMatrices().view_projection;
+        drawConstants.invViewProjection            = capsaicin.getCameraMatrices().inv_view_projection;
+        drawConstants.cameraPosition               = capsaicin.getCamera().eye;
+        drawConstants.invScreenSize                = 1.0f / float2{gBuffer0.getWidth(), gBuffer0.getHeight()};
 
         gfxBufferGetData<VisibilityToGbufferConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }

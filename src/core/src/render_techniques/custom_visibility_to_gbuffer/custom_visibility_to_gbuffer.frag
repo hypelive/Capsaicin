@@ -29,9 +29,9 @@ uint g_VertexDataIndex;
 
 struct GBuffer
 {
-    float4 albedo : SV_Target0;
+    float4 albedoNormalZ : SV_Target0;
     float4 normalXYRoughnessMetallicity : SV_Target1;
-    float4 emissionNormalZ : SV_Target2;
+    float4 emission : SV_Target2;
 };
 
 struct ShadedVertex
@@ -65,6 +65,11 @@ ShadedVertex computeInterpolants(float3 barycentrics, ShadedVertex v0, ShadedVer
     result.uv = barycentrics.x * v0.uv + barycentrics.y * v1.uv + barycentrics.z * v2.uv;
     result.normal = normalize(barycentrics.x * v0.normal + barycentrics.y * v1.normal + barycentrics.z * v2.normal);
     return result;
+}
+
+float2 computeUv(float3 barycentrics, ShadedVertex v0, ShadedVertex v1, ShadedVertex v2)
+{
+    return barycentrics.x * v0.uv + barycentrics.y * v1.uv + barycentrics.z * v2.uv;
 }
 
 float3 computeBarycentrics(float3 rayOrigin, float3 rayDirection, float3 v0, float3 v1, float3 v2)
@@ -111,7 +116,7 @@ void calculateTangentBitangent(ShadedVertex v0, ShadedVertex v1, ShadedVertex v2
     bitangent = tangentBitangent[1];
 }
 
-float3 calculateNormal(ShadedVertex params, float3 tangent, float3 bitangent, Material material)
+float3 calculateNormal(ShadedVertex params, float3 tangent, float3 bitangent, Material material, float2 ddx, float2 ddy)
 {
     float3 normal = params.normal;
     uint normalMap = asuint(material.normal_alpha_side.x);
@@ -123,40 +128,29 @@ float3 calculateNormal(ShadedVertex params, float3 tangent, float3 bitangent, Ma
         float3x3 TBN = float3x3(tangent.x, newBitangent.x, normal.x,
                                 tangent.y, newBitangent.y, normal.y,
                                 tangent.z, newBitangent.z, normal.z);
-        float3 textureNormal = 2.0f * g_TextureMaps[NonUniformResourceIndex(normalMap)].SampleLevel(g_LinearSampler, params.uv, 0.0f).xyz - 1.0f;
+        float3 textureNormal = 2.0f * g_TextureMaps[NonUniformResourceIndex(normalMap)].SampleGrad(g_LinearSampler, params.uv, ddx, ddy).xyz - 1.0f;
         normal = normalize(mul(TBN, textureNormal));
     }
 
     return normal;
 }
 
-float3 calculateEmission(Material material, float2 uv)
+float3 calculateEmission(Material material, float2 uv, float2 ddx, float2 ddy)
 {
     // TODO scale with alpha?
     float3 result = material.emissivity.xyz;
     uint emissivityTextureId = asuint(material.emissivity.w);
     if (emissivityTextureId != asuint(-1))
     {
-        result *= g_TextureMaps[NonUniformResourceIndex(emissivityTextureId)].SampleLevel(g_LinearSampler, uv, 0.0f).xyz;
+        result *= g_TextureMaps[NonUniformResourceIndex(emissivityTextureId)].SampleGrad(g_LinearSampler, uv, ddx, ddy).xyz;
     }
 
     return result;        
 }
 
-GBuffer main(in VertexParams params)
+void shadeVertices(UnpackedVisibilityBuffer visibilityBufferData, Instance instance, out ShadedVertex v0, out ShadedVertex v1, out ShadedVertex v2)
 {
-    UnpackedVisibilityBuffer visibilityBufferData = unpackVisibilityBuffer(g_VisibilityBuffer.Load(int3(params.screenPosition.xy, 0)));
-
-    float2 uv = params.screenPosition.xy * g_DrawConstants.invScreenSize;
-    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
-
-    // Translate point from near plane (we have inversed depth) to the world space.
-    float4 nearPlaneWorldPosition = mul(g_DrawConstants.invViewProjection, float4(ndc, 1.0f, 1.0f));
-    nearPlaneWorldPosition.xyz /= nearPlaneWorldPosition.w;
-    const float3 cameraViewDirection = normalize(nearPlaneWorldPosition.xyz - g_DrawConstants.cameraPosition.xyz);
-
     Meshlet meshlet = g_MeshletBuffer[visibilityBufferData.meshletId];
-    Instance instance = g_InstanceBuffer[visibilityBufferData.instanceId];
     float3x4 transform = g_TransformBuffer[instance.transform_index];
 
     uint indicesOffset = meshlet.data_offset_idx + meshlet.vertex_count + visibilityBufferData.primitiveId;
@@ -164,28 +158,62 @@ GBuffer main(in VertexParams params)
     uint3 unpackedIndices = uint3(packedIndices & 0x3F, (packedIndices >> 10) & 0x3F, packedIndices >> 20);
     uint instanceVertexOffset = instance.vertex_offset_idx[g_VertexDataIndex];
     uint vertexOffset0 = instanceVertexOffset + g_MeshletPackBuffer[meshlet.data_offset_idx + unpackedIndices.x];
-    ShadedVertex vertex0 = shadeVertex(g_VertexBuffer[vertexOffset0], transform);
+    v0 = shadeVertex(g_VertexBuffer[vertexOffset0], transform);
     uint vertexOffset1 = instanceVertexOffset + g_MeshletPackBuffer[meshlet.data_offset_idx + unpackedIndices.y];
-    ShadedVertex vertex1 = shadeVertex(g_VertexBuffer[vertexOffset1], transform);
+    v1 = shadeVertex(g_VertexBuffer[vertexOffset1], transform);
     uint vertexOffset2 = instanceVertexOffset + g_MeshletPackBuffer[meshlet.data_offset_idx + unpackedIndices.z];
-    ShadedVertex vertex2 = shadeVertex(g_VertexBuffer[vertexOffset2], transform);
+    v2 = shadeVertex(g_VertexBuffer[vertexOffset2], transform);
+}
 
-    float3 barycentrics = computeBarycentrics(g_DrawConstants.cameraPosition.xyz, cameraViewDirection,
+float3 calculateCameraDirection(float2 screenCoordinates)
+{
+    float2 uv = screenCoordinates * g_DrawConstants.invScreenSize;
+    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
+
+    // Translate point from near plane (we have inversed depth) to the world space.
+    float4 nearPlaneWorldPosition = mul(g_DrawConstants.invViewProjection, float4(ndc, 1.0f, 1.0f));
+    nearPlaneWorldPosition.xyz /= nearPlaneWorldPosition.w;
+
+    return normalize(nearPlaneWorldPosition.xyz - g_DrawConstants.cameraPosition.xyz);
+}
+
+GBuffer main(in VertexParams params)
+{
+    UnpackedVisibilityBuffer visibilityBufferData = unpackVisibilityBuffer(g_VisibilityBuffer.Load(int3(params.screenPosition.xy, 0)));
+    Instance instance = g_InstanceBuffer[visibilityBufferData.instanceId];
+
+    ShadedVertex vertex0, vertex1, vertex2;
+    shadeVertices(visibilityBufferData, instance, vertex0, vertex1, vertex2);
+
+    const float3 cameraDirection00 = calculateCameraDirection(params.screenPosition.xy);
+    const float3 cameraDirection10 = calculateCameraDirection(params.screenPosition.xy + float2(1.0f, 0.0f));
+    const float3 cameraDirection01 = calculateCameraDirection(params.screenPosition.xy + float2(0.0f, 1.0f));
+
+    float3 barycentrics00 = computeBarycentrics(g_DrawConstants.cameraPosition.xyz, cameraDirection00,
         vertex0.worldPosition, vertex1.worldPosition, vertex2.worldPosition);
-    ShadedVertex interpolants = computeInterpolants(barycentrics, vertex0, vertex1, vertex2);
+    float3 barycentrics10 = computeBarycentrics(g_DrawConstants.cameraPosition.xyz, cameraDirection10,
+        vertex0.worldPosition, vertex1.worldPosition, vertex2.worldPosition);
+    float3 barycentrics01 = computeBarycentrics(g_DrawConstants.cameraPosition.xyz, cameraDirection01,
+        vertex0.worldPosition, vertex1.worldPosition, vertex2.worldPosition);
+
+    ShadedVertex interpolants = computeInterpolants(barycentrics00, vertex0, vertex1, vertex2);
+    float2 uv10 = computeUv(barycentrics10, vertex0, vertex1, vertex2);
+    float2 uv01 = computeUv(barycentrics01, vertex0, vertex1, vertex2);
+    float2 duvdx = uv10 - interpolants.uv;
+    float2 duvdy = uv01 - interpolants.uv;
 
     Material material = g_MaterialBuffer[instance.material_index];
-    MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, interpolants.uv);
+    MaterialEvaluated materialEvaluated = MakeMaterialEvaluated(material, interpolants.uv, duvdx, duvdy);
 
     float3 tangent, bitangent;
     calculateTangentBitangent(vertex0, vertex1, vertex2, tangent, bitangent);
-    float3 normal = calculateNormal(interpolants, tangent, bitangent, material);
+    float3 normal = calculateNormal(interpolants, tangent, bitangent, material, duvdx, duvdy);
     float3 packedNormal = normal * 0.5f + 0.5f;
 
     GBuffer gBuffer;
-    gBuffer.albedo = float4(materialEvaluated.albedo, 0.0f);
+    gBuffer.albedoNormalZ = float4(materialEvaluated.albedo, packedNormal.z);
     gBuffer.normalXYRoughnessMetallicity = float4(packedNormal.xy, materialEvaluated.roughness, materialEvaluated.metallicity);
-    gBuffer.emissionNormalZ = float4(calculateEmission(material, interpolants.uv), packedNormal.z);
+    gBuffer.emission = float4(calculateEmission(material, interpolants.uv, duvdx, duvdy), 0.0f);
 
     return gBuffer;
 }

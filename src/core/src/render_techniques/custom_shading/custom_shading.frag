@@ -168,17 +168,17 @@ float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 vi
 
 struct GBufferData
 {
-    float4 albedo;
+    float4 albedoNormalZ;
     float4 normalXYRoughnessMetallicity;
-    float4 emissionNormalZ;
+    float4 emission;
 };
 
 GBufferData readGBuffer(float2 texelCoordinates)
 {
     GBufferData data;
-    data.albedo = g_GBuffer0.Load(int3(texelCoordinates, 0));
+    data.albedoNormalZ = g_GBuffer0.Load(int3(texelCoordinates, 0));
     data.normalXYRoughnessMetallicity = g_GBuffer1.Load(int3(texelCoordinates, 0));
-    data.emissionNormalZ = g_GBuffer2.Load(int3(texelCoordinates, 0));
+    data.emission = g_GBuffer2.Load(int3(texelCoordinates, 0));
 
     return data;
 }
@@ -191,12 +191,13 @@ Pixel main(in VertexParams params)
     GBufferData gBuffer = readGBuffer(params.screenPosition.xy);
 
     MaterialEvaluated materialEvaluated;
-    materialEvaluated.albedo = gBuffer.albedo.xyz;
+    materialEvaluated.albedo = gBuffer.albedoNormalZ.xyz;
     materialEvaluated.metallicity = gBuffer.normalXYRoughnessMetallicity.w;
     materialEvaluated.roughness = gBuffer.normalXYRoughnessMetallicity.z;
     MaterialBRDF materialBrdf = MakeMaterialBRDF(materialEvaluated);
 
-    float3 normal = float3(gBuffer.normalXYRoughnessMetallicity.xy, gBuffer.emissionNormalZ.w) * 2.0f - 1.0f;
+    float3 normal = float3(gBuffer.normalXYRoughnessMetallicity.xy, gBuffer.albedoNormalZ.w) * 2.0f - 1.0f;
+    normal = normalize(normal);
 
     float pixelDepth = g_DepthCopy.Load(int3(params.screenPosition.xy, 0));
     float4 screenSpacePosition = float4(ndc, pixelDepth, 1.0f);
@@ -206,7 +207,7 @@ Pixel main(in VertexParams params)
     const float3 cameraPosition = g_DrawConstants.cameraPosition.xyz;
     const float3 viewDirection = normalize(cameraPosition - worldPosition.xyz);
 
-    const float3 emission = gBuffer.emissionNormalZ.xyz;
+    const float3 emission = gBuffer.emission.xyz;
     float3 radiance = emission +
         calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, worldPosition.xyz) +
         calculateIndirectLighting(materialBrdf, normal, viewDirection);
