@@ -15,6 +15,7 @@ Texture2D<float4> g_GBuffer0;
 Texture2D<float4> g_GBuffer1;
 Texture2D<float4> g_GBuffer2;
 Texture2D<float> g_DepthCopy;
+Texture2D<float> g_AO;
 ConstantBuffer<LightsBufferInfo> g_LightsBufferInfo;
 StructuredBuffer<Light> g_LightsBuffer;
 TextureCube<float4> g_IrradianceProbe;
@@ -149,7 +150,7 @@ float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 view
     return radiance;
 }
 
-float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection)
+float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 viewDirection, float2 pixelCoordinates)
 {
     const float VdotN = max(0.0f, dot(viewDirection, normal));
     const float3 Fresnel = calculateFresnelSchlickWithRoughness(VdotN, material.F0, material.roughnessAlpha);
@@ -162,8 +163,9 @@ float3 calculateIndirectLighting(MaterialBRDF material, float3 normal, float3 vi
     const float2 brdf = g_BrdfLut.SampleLevel(g_LinearSampler, float2(VdotN, material.roughnessAlpha), 0.0f).xy;
     const float3 specular = Fresnel * prefilteredColor * (material.F0 * brdf.x + brdf.y);
 
-    // TODO add AO.
-    return diffuse + specular;
+    const float AO = g_AO.Load(int3(pixelCoordinates, 0));
+
+    return AO * (diffuse + specular);
 }
 
 struct GBufferData
@@ -210,7 +212,7 @@ Pixel main(in VertexParams params)
     const float3 emission = gBuffer.emission.xyz;
     float3 radiance = emission +
         calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, worldPosition.xyz) +
-        calculateIndirectLighting(materialBrdf, normal, viewDirection);
+        calculateIndirectLighting(materialBrdf, normal, viewDirection, params.screenPosition.xy);
 
     float3 color = tonemap(radiance);
     color = applyInverseGamma(color);

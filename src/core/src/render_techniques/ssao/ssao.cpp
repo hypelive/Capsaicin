@@ -46,6 +46,8 @@ SharedTextureList SSAO::getSharedTextures() const noexcept
     textures.push_back({"DepthCopy", SharedTexture::Access::Read});
     textures.push_back(
         {"AO", SharedTexture::Access::Write, SharedTexture::Flags::Clear, DXGI_FORMAT_R8_UNORM});
+    textures.push_back(
+        {"TempAO", SharedTexture::Access::Write, SharedTexture::Flags::Clear, DXGI_FORMAT_R8_UNORM});
     return textures;
 }
 
@@ -83,22 +85,38 @@ void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
         gfxBufferGetData<SSAOConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
 
-    // Set the root parameters.
+    // Set the root parameters for Computing SSAO.
     {
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_Constants", gpuDrawConstants);
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_Depth", depthTexture);
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_GBuffer1", capsaicin.getSharedTexture("GBuffer1"));
-        gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_AO", capsaicin.getSharedTexture("AO"));
+        gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_AO", capsaicin.getSharedTexture("TempAO"));
 
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_NearestSampler",
             capsaicin.getNearestSampler());
     }
 
+    // Compute SSAO.
     {
         gfxCommandBindKernel(gfx_, m_ssaoKernel);
 
         glm::uvec2 const groupCount =
             ceil(renderResolution / static_cast<float>(TILE_SIZE));
+        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
+    }
+
+    // Set parameters for blur.
+    {
+        gfxProgramSetParameter(gfx_, m_blurProgram, "g_Constants", gpuDrawConstants);
+        gfxProgramSetParameter(gfx_, m_blurProgram, "g_Input", capsaicin.getSharedTexture("TempAO"));
+        gfxProgramSetParameter(gfx_, m_blurProgram, "g_Output", capsaicin.getSharedTexture("AO"));
+    }
+
+    // Blur/Denoise AO.
+    {
+        gfxCommandBindKernel(gfx_, m_blurKernel);
+
+        glm::uvec2 const groupCount = ceil(renderResolution / static_cast<float>(TILE_SIZE));
         gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 

@@ -15,7 +15,7 @@ SamplerState g_NearestSampler;
 float3 getTap(uint index)
 {
     // https://colab.research.google.com/drive/1DInbx8id8yAXFVb2UB5thppFxZE_XI7V#scrollTo=oc2EDqquhv70
-    float3 TAPS[NUM_TAPS] = {
+    static const float3 TAPS[NUM_TAPS] = {
         float3(0.2879492110269814f, -0.5154844222894919f, 0.17179474104842768f),
         float3(-0.24952216023065305f, 0.07443199347337935f, 0.09934042793632533f),
         float3(0.43198839873482126f, -0.8126853256623418f, 0.3014849400627313f),
@@ -87,7 +87,7 @@ float3 getTap(uint index)
 
 float3 getTangent(uint2 texelCoordinates)
 {
-    float3 TANGENTS[NUM_TANGENTS] = {
+    static const float3 TANGENTS[NUM_TANGENTS] = {
         float3(0.6848813937336977f, -0.09038904356140687f, 0.7230264845228297f),
         float3(-0.3679108967498836f, -0.5649743136782859f, -0.7385428876757574f),
         float3(-0.16698915175883441f, 0.6624400390265878f, 0.7302655803810816f),
@@ -115,7 +115,7 @@ float3 getTangent(uint2 texelCoordinates)
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
     uint2 currentTexelCoordinates = did;
-    if (any(currentTexelCoordinates > g_Constants.screenSize.xy))
+    if (any(currentTexelCoordinates >= g_Constants.screenSize.xy))
     {
         return;
     }
@@ -138,16 +138,11 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     );
 
     // TODO move to params
-    const float RADIUS = 3.0f;
+    const float RADIUS = 1.0f;
     float occluded = 0.0f;
     for (uint tapIndex = 0; tapIndex < NUM_TAPS; ++tapIndex)
     {
         float3 tsTap = getTap(tapIndex);
-        // Reconstruct world pos
-        // Translate tap to ws with TBN and add world pos
-        // use viewProj matrix to get ndc
-        // calculate uv for sampling depth
-        // compare depth in current pixel with sampled depth
         float3 wsTap = RADIUS * mul(TBN, tsTap) + wsPosition.xyz;
         float4 ndcTap = mul(g_Constants.viewProjection, float4(wsTap, 1.0f));
         ndcTap.xyz /= ndcTap.w;
@@ -156,8 +151,8 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         float tapDepth = g_Depth.SampleLevel(g_NearestSampler, uvTap, 0.0f);
         
         // TODO add a small bias
-        // TODO add radius check
-        occluded += tapDepth >= ndcTap.z ? 1.0f : 0.0f;
+        float rangeFactor = smoothstep(0.0f, 1.0f, RADIUS / abs(ndcTap.z - tapDepth));
+        occluded += rangeFactor * (tapDepth >= ndcTap.z ? 1.0f : 0.0f);
     }
     float aoFactor = 1.0f - occluded / NUM_TAPS;
 

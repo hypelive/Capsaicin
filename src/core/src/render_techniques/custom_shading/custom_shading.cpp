@@ -49,6 +49,7 @@ SharedTextureList CustomShading::getSharedTextures() const noexcept
     textures.push_back({"GBuffer2", SharedTexture::Access::Read});
     textures.push_back({"DepthCopy", SharedTexture::Access::Read});
     textures.push_back({"Depth", SharedTexture::Access::Read});
+    textures.push_back({"AO", SharedTexture::Access::Read});
     return textures;
 }
 
@@ -118,6 +119,8 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
             capsaicin.getSharedTexture("GBuffer2"));
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_DepthCopy",
             capsaicin.getSharedTexture("DepthCopy"));
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_AO",
+            capsaicin.getSharedTexture("AO"));
 
         auto const &textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_TextureMaps", textures.data(),
