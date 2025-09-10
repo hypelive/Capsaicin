@@ -21,7 +21,11 @@ public:
      */
     RenderOptionList getRenderOptions() noexcept override;
 
-    struct RenderOptions { };
+    struct RenderOptions
+    {
+        // In world space.
+        float m_radius = 0.375f;
+    };
 
     /**
      * Convert render options to internal options format.
@@ -81,7 +85,7 @@ public:
     void renderGUI(CapsaicinInternal &capsaicin) const noexcept override;
 
 private:
-    RenderOptions options;
+    RenderOptions m_options;
 
     GfxProgram m_ssaoProgram;
     GfxKernel  m_ssaoKernel;

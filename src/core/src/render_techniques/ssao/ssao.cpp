@@ -17,6 +17,7 @@ SSAO::~SSAO()
 RenderOptionList SSAO::getRenderOptions() noexcept
 {
     RenderOptionList newOptions;
+    newOptions.emplace(RENDER_OPTION_MAKE(m_radius, m_options));
     return newOptions;
 }
 
@@ -24,6 +25,7 @@ SSAO::RenderOptions SSAO::convertOptions(
     [[maybe_unused]] RenderOptionList const &options) noexcept
 {
     RenderOptions newOptions;
+    RENDER_OPTION_GET(m_radius, newOptions, options);
     return newOptions;
 }
 
@@ -69,6 +71,7 @@ bool SSAO::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
 
 void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
+    m_options                = convertOptions(capsaicin.getOptions());
     const auto &depthTexture = capsaicin.getSharedTexture("DepthCopy");
 
     const glm::vec2 renderResolution = {depthTexture.getWidth(), depthTexture.getHeight()};
@@ -81,6 +84,7 @@ void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
         drawConstants.screenSize        = glm::vec4{renderResolution.x, renderResolution.y,
                                              1.0f / renderResolution.x,
                                              1.0f / renderResolution.y};
+        drawConstants.radius = m_options.m_radius;
 
         gfxBufferGetData<SSAOConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }

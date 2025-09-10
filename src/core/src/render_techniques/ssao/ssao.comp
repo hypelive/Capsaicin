@@ -137,22 +137,20 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         wsTangent.z, wsBitangent.z, wsNormal.z
     );
 
-    // TODO move to params
-    const float RADIUS = 1.0f;
+    const float radius = g_Constants.radius;
     float occluded = 0.0f;
     for (uint tapIndex = 0; tapIndex < NUM_TAPS; ++tapIndex)
     {
         float3 tsTap = getTap(tapIndex);
-        float3 wsTap = RADIUS * mul(TBN, tsTap) + wsPosition.xyz;
+        float3 wsTap = radius * mul(TBN, tsTap) + wsPosition.xyz;
         float4 ndcTap = mul(g_Constants.viewProjection, float4(wsTap, 1.0f));
         ndcTap.xyz /= ndcTap.w;
 
         float2 uvTap = 0.5f * float2(1.0f + ndcTap.x, 1.0f - ndcTap.y);
         float tapDepth = g_Depth.SampleLevel(g_NearestSampler, uvTap, 0.0f);
         
-        // TODO add a small bias
-        float rangeFactor = smoothstep(0.0f, 1.0f, RADIUS / abs(ndcTap.z - tapDepth));
-        occluded += rangeFactor * (tapDepth >= ndcTap.z ? 1.0f : 0.0f);
+        float rangeFactor = smoothstep(0.0f, 1.0f, radius / abs(ndcTap.z - tapDepth));
+        occluded += rangeFactor * ((tapDepth >= ndcTap.z) ? 1.0f : 0.0f);
     }
     float aoFactor = 1.0f - occluded / NUM_TAPS;
 

@@ -61,6 +61,8 @@ float4 PrefilterIBL(in float4 pos : SV_Position) : SV_Target
         float weight = saturate(wi_local.z);
         wi.x = -wi.x;
         wi.z = -wi.z;
+
+        // This method will converge to Expectation value, but probably it's better to use Monte Carlo here.
         color += weight * g_EnvironmentBuffer.SampleLevel(g_LinearSampler, wi, 0.0f).xyz;
         total_weight += weight;
     }
