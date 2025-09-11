@@ -50,6 +50,8 @@ SharedTextureList CustomShading::getSharedTextures() const noexcept
     textures.push_back({"DepthCopy", SharedTexture::Access::Read});
     textures.push_back({"Depth", SharedTexture::Access::Read});
     textures.push_back({"AO", SharedTexture::Access::Read});
+    textures.push_back({"ShadingResult", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
+                        DXGI_FORMAT_R16G16B16A16_FLOAT});
     return textures;
 }
 
@@ -80,7 +82,7 @@ bool CustomShading::init([[maybe_unused]] CapsaicinInternal const &capsaicin) no
 
 void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    auto const &colorTexture = capsaicin.getSharedTexture("Color");
+    auto const &targetTexture = capsaicin.getSharedTexture("ShadingResults");
 
     auto const &gpuDrawConstants = capsaicin.allocateConstantBuffer<ShadingConstants>(1);
     {
@@ -88,7 +90,7 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
         drawConstants.viewProjection    = capsaicin.getCameraMatrices().view_projection;
         drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
         drawConstants.cameraPosition    = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize     = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
+        drawConstants.invScreenSize     = 1.0f / float2{targetTexture.getWidth(), targetTexture.getHeight()};
 
         gfxBufferGetData<ShadingConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
@@ -135,7 +137,7 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
     }
 
     {
-        gfxCommandBindColorTarget(gfx_, 0, colorTexture);
+        gfxCommandBindColorTarget(gfx_, 0, targetTexture);
         gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandBindKernel(gfx_, m_shadingKernel);
 

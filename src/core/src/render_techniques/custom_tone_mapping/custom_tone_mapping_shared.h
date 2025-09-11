@@ -1,11 +1,11 @@
-#ifndef SSAO_SHARED_H
-#define SSAO_SHARED_H
+#ifndef CUSTOM_TONE_MAPPING_SHARED_H
+#define CUSTOM_TONE_MAPPING_SHARED_H
 
 #include "gpu_shared.h"
 
 #define TILE_SIZE 8
 
-struct SSAOConstants
+struct ToneMapConstants
 {
     float4x4 viewProjection;
     float4x4 invViewProjection;

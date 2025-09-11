@@ -1,11 +1,11 @@
-#ifndef SSAO_SHARED_H
-#define SSAO_SHARED_H
+#ifndef FXAA_SHARED_H
+#define FXAA_SHARED_H
 
 #include "gpu_shared.h"
 
 #define TILE_SIZE 8
 
-struct SSAOConstants
+struct FXAAConstants
 {
     float4x4 viewProjection;
     float4x4 invViewProjection;

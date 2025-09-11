@@ -25,7 +25,7 @@ SamplerState g_LinearSampler;
 
 struct Pixel
 {
-    float4 color : SV_Target0;
+    float4 radiance : SV_Target0;
 };
 
 float3 tonemap(float3 radiance)
@@ -214,11 +214,8 @@ Pixel main(in VertexParams params)
         calculateDirectLighting(materialBrdf, normal, viewDirection, cameraPosition, worldPosition.xyz) +
         calculateIndirectLighting(materialBrdf, normal, viewDirection, params.screenPosition.xy);
 
-    float3 color = tonemap(radiance);
-    color = applyInverseGamma(color);
-
     Pixel pixel;
-    pixel.color = float4(color, 1.0f);
+    pixel.radiance = float4(radiance, 1.0f);
 
     return pixel;
 }
