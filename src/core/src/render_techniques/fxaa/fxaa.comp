@@ -2,8 +2,8 @@
 #include "math/color.hlsl"
 
 ConstantBuffer<FXAAConstants> g_Constants;
-Texture2D<float4> g_Input;
-RWTexture2D<float4> g_Output;
+Texture2D<float4> g_SourceTexture;
+RWTexture2D<float4> g_TargetTexture;
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
@@ -14,5 +14,5 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         return;
     }
 
-    g_Output[pixelCoordinates] = g_Input.Load(int3(pixelCoordinates, 0));
+    g_TargetTexture[pixelCoordinates] = g_SourceTexture.Load(int3(pixelCoordinates, 0));
 }

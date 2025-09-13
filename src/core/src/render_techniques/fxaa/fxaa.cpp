@@ -4,6 +4,7 @@
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
+static constexpr std::string_view SOURCE_TEXTURE_NAME = "LDRColor";
 static constexpr std::string_view TARGET_TEXTURE_NAME = "Color";
 
 namespace Capsaicin
@@ -44,7 +45,7 @@ SharedBufferList FXAA::getSharedBuffers() const noexcept
 SharedTextureList FXAA::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"ShadingResult", SharedTexture::Access::Read});
+    textures.push_back({SOURCE_TEXTURE_NAME, SharedTexture::Access::Read});
     textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write});
     return textures;
 }
@@ -82,8 +83,8 @@ void FXAA::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
     // Set the root parameters for Computing FXAA.
     {
         gfxProgramSetParameter(gfx_, m_program, "g_Constants", gpuDrawConstants);
-        gfxProgramSetParameter(gfx_, m_program, "g_Input", capsaicin.getSharedTexture("ShadingResult"));
-        gfxProgramSetParameter(gfx_, m_program, "g_Output", targetTexture);
+        gfxProgramSetParameter(gfx_, m_program, "g_SourceTexture", capsaicin.getSharedTexture(SOURCE_TEXTURE_NAME));
+        gfxProgramSetParameter(gfx_, m_program, "g_TargetTexture", targetTexture);
     }
 
     // Compute FXAA.

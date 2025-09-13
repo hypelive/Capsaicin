@@ -4,7 +4,7 @@
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
-static constexpr std::string_view TARGET_TEXTURE_NAME = "ShadingResult";
+static constexpr std::string_view TARGET_TEXTURE_NAME = "HDRColor";
 
 namespace Capsaicin
 {

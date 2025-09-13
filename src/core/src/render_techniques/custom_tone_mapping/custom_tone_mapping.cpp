@@ -4,7 +4,8 @@
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
-static constexpr std::string_view TARGET_TEXTURE_NAME = "ShadingResult";
+static constexpr std::string_view SOURCE_TEXTURE_NAME = "HDRColor";
+static constexpr std::string_view TARGET_TEXTURE_NAME = "LDRColor";
 
 namespace Capsaicin
 {
@@ -44,7 +45,9 @@ SharedBufferList CustomToneMapping::getSharedBuffers() const noexcept
 SharedTextureList CustomToneMapping::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::ReadWrite});
+    textures.push_back({SOURCE_TEXTURE_NAME, SharedTexture::Access::Read});
+    textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write, SharedTexture::Flags::None,
+                        DXGI_FORMAT_R11G11B10_FLOAT});
     return textures;
 }
 
@@ -72,8 +75,8 @@ void CustomToneMapping::render([[maybe_unused]] CapsaicinInternal &capsaicin) no
     {
         ToneMapConstants drawConstants = {};
         drawConstants.screenSize       = glm::vec4{renderResolution.x, renderResolution.y,
-                                             1.0f / renderResolution.x,
-                                             1.0f / renderResolution.y};
+                                                   1.0f / renderResolution.x,
+                                                   1.0f / renderResolution.y};
 
         gfxBufferGetData<ToneMapConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
@@ -81,6 +84,8 @@ void CustomToneMapping::render([[maybe_unused]] CapsaicinInternal &capsaicin) no
     // Set the root parameters for Computing CustomToneMapping.
     {
         gfxProgramSetParameter(gfx_, m_program, "g_Constants", gpuDrawConstants);
+        gfxProgramSetParameter(gfx_, m_program, "g_SourceTexture",
+            capsaicin.getSharedTexture(SOURCE_TEXTURE_NAME));
         gfxProgramSetParameter(gfx_, m_program, "g_TargetTexture", targetTexture);
     }
 

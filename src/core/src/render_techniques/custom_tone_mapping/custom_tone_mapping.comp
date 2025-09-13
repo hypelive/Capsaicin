@@ -2,6 +2,7 @@
 #include "math/color.hlsl"
 
 ConstantBuffer<ToneMapConstants> g_Constants;
+Texture2D<float4> g_SourceTexture;
 RWTexture2D<float4> g_TargetTexture;
 
 float3 tonemap(float3 radiance)
@@ -22,7 +23,7 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         return;
     }
 
-    float3 radiance = g_TargetTexture[did].xyz;
+    float3 radiance = g_SourceTexture.Load(int3(did, 0)).xyz;
     float3 color = tonemap(radiance);
     color = applyInverseGamma(color);
 
