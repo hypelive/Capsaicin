@@ -47,7 +47,7 @@ SharedTextureList CustomToneMapping::getSharedTextures() const noexcept
     SharedTextureList textures;
     textures.push_back({SOURCE_TEXTURE_NAME, SharedTexture::Access::Read});
     textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write, SharedTexture::Flags::None,
-                        DXGI_FORMAT_R11G11B10_FLOAT});
+                        DXGI_FORMAT_R8G8B8A8_UNORM});
     return textures;
 }
 

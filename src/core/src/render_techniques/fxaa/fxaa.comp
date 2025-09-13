@@ -5,6 +5,21 @@ ConstantBuffer<FXAAConstants> g_Constants;
 Texture2D<float4> g_SourceTexture;
 RWTexture2D<float4> g_TargetTexture;
 
+// TODO find tune these.
+#define FXAA_EDGE_THRESHOLD      (1.0/8.0)
+#define FXAA_EDGE_THRESHOLD_MIN  (1.0/24.0)
+#define FXAA_SEARCH_STEPS        16
+#define FXAA_SEARCH_THRESHOLD    (1.0/4.0)
+#define FXAA_SUBPIX_CAP          (3.0/4.0)
+#define FXAA_SUBPIX_TRIM         (1.0/4.0)
+#define FXAA_SUBPIX_TRIM_SCALE (1.0/(1.0 - FXAA_SUBPIX_TRIM))
+
+float calculateLuma(float3 rgb)
+{
+    // Pure blue aliasing is rare, so we don't account it.
+    return rgb.y * (0.587f / 0.299f) + rgb.x;
+}
+
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
@@ -14,5 +29,108 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         return;
     }
 
-    g_TargetTexture[pixelCoordinates] = g_SourceTexture.Load(int3(pixelCoordinates, 0));
+    // Sample neighborhood pixels.
+    float3 tapM = g_SourceTexture.Load(int3(pixelCoordinates + int2(0, 0), 0)).xyz;
+    float3 tapN = g_SourceTexture.Load(int3(pixelCoordinates + int2(0, -1), 0)).xyz;
+    float3 tapE = g_SourceTexture.Load(int3(pixelCoordinates + int2(1, 0), 0)).xyz;
+    float3 tapS = g_SourceTexture.Load(int3(pixelCoordinates + int2(0, 1), 0)).xyz;
+    float3 tapW = g_SourceTexture.Load(int3(pixelCoordinates + int2(-1, 0), 0)).xyz;
+    float lumaM = calculateLuma(tapM);
+    float lumaN = calculateLuma(tapN);
+    float lumaE = calculateLuma(tapE);
+    float lumaS = calculateLuma(tapS);
+    float lumaW = calculateLuma(tapW);
+    float lumaMin = min(lumaM, min(min(lumaN, lumaE), min(lumaS, lumaW)));
+    float lumaMax = max(lumaM, max(max(lumaN, lumaE), max(lumaS, lumaW)));
+    float lumaRange = lumaMax - lumaMin;
+    if (lumaRange < max(FXAA_EDGE_THRESHOLD_MIN, lumaMax * FXAA_EDGE_THRESHOLD))
+    {
+        // Early return if edge wasn't found.
+        g_TargetTexture[pixelCoordinates] = float4(tapM, 1.0f);
+        return;
+    }
+
+    float3 tapNW = g_SourceTexture.Load(int3(pixelCoordinates + int2(-1, 1), 0)).xyz;
+    float3 tapNE = g_SourceTexture.Load(int3(pixelCoordinates + int2(1, 1), 0)).xyz;
+    float3 tapSE = g_SourceTexture.Load(int3(pixelCoordinates + int2(1, -1), 0)).xyz;
+    float3 tapSW = g_SourceTexture.Load(int3(pixelCoordinates + int2(-1, -1), 0)).xyz;
+    float lumaNW = calculateLuma(tapNW);
+    float lumaNE = calculateLuma(tapNE);
+    float lumaSE = calculateLuma(tapSE);
+    float lumaSW = calculateLuma(tapSW);
+
+    // Detect subpixel aliasing.
+    float lumaLowpass = 0.25f * (lumaN + lumaE + lumaS + lumaW);
+    float lumaLowpassRange = abs(lumaM - lumaLowpass);
+    float lowpassBlend = max(0.0f, FXAA_SUBPIX_TRIM_SCALE * ((lumaLowpassRange / lumaRange) - FXAA_SUBPIX_TRIM));
+    lowpassBlend = min(FXAA_SUBPIX_CAP, lowpassBlend);
+    // Calculate mean of 3x3 neighborhood.
+    float3 lowpassColor = (1.0f / 9.0f) * (tapM + tapN + tapE + tapS + tapW + tapNW + tapNE + tapSE + tapSW);
+
+    // Find vertical/horizontal edges. Modification of Sobel Filter to detect one pixel width edges.
+    float edgeVert =
+        abs(0.25f * lumaNW - 0.5f * lumaN + 0.25f * lumaNE) +
+        abs(0.5f * lumaW - 1.0f * lumaM + 0.5f * lumaE) +
+        abs(0.25f * lumaSW - 0.5f * lumaS + 0.25f * lumaSE);
+    float edgeHorz = 
+        abs(0.25f * lumaNW - 0.5f * lumaW + 0.25f * lumaSW) +
+        abs(0.5f * lumaN - 1.0f * lumaM + 0.5f * lumaS) +
+        abs(0.25f * lumaNE - 0.5f * lumaE + 0.25f * lumaSE);
+    bool horizontalSpan = edgeHorz >= edgeVert;
+
+    int2 edgePixelForBlendOffset;
+    if (!horizontalSpan)
+    {
+        edgePixelForBlendOffset = abs(lumaE - lumaM) > abs(lumaW - lumaM) ? int2(1, 0) : int2(-1, 0);
+    }
+    else
+    {
+        edgePixelForBlendOffset = abs(lumaS - lumaM) > abs(lumaN - lumaM) ? int2(1, 0) : int2(-1, 0);
+    }
+
+    // Configure search of an edge along the edge direction.
+    int2 stepOffset = horizontalSpan ? int2(1, 0) : int2(0, 1);
+    int2 currentOffsetPositive = stepOffset;
+    int2 currentOffsetNegative = -stepOffset;
+    bool positiveSearchComplete = false;
+    bool negativeSearchComplete = false;
+    float lumaPositive;
+    float lumaNegative;
+    float searchThreshold = !horizontalSpan ?
+        max(abs(lumaE - lumaM), abs(lumaW - lumaM)) :
+        max(abs(lumaN - lumaM), abs(lumaS - lumaM));    
+    searchThreshold *= FXAA_EDGE_THRESHOLD;
+
+    // Search along the edge.
+    for (uint stepIndex = 0; stepIndex < FXAA_SEARCH_STEPS; ++stepIndex)
+    {
+        if (!positiveSearchComplete)
+        {
+            lumaPositive = calculateLuma(g_SourceTexture.Load(int3(pixelCoordinates + currentOffsetPositive, 0)).xyz);
+        }
+        if (!negativeSearchComplete)
+        {
+            lumaNegative = calculateLuma(g_SourceTexture.Load(int3(pixelCoordinates + currentOffsetNegative, 0)).xyz);
+        }
+        positiveSearchComplete |= abs(lumaPositive - lumaM) > searchThreshold;
+        negativeSearchComplete |= abs(lumaNegative - lumaM) > searchThreshold;
+
+        if (!positiveSearchComplete)
+        {
+            currentOffsetPositive += stepOffset;
+        }
+        if (!negativeSearchComplete)
+        {
+            currentOffsetNegative -= stepOffset;
+        }
+    }
+
+    float positiveDistance = dot(float2(1.0f, 1.0f), abs(currentOffsetPositive));
+    float negativeDistance = dot(float2(1.0f, 1.0f), abs(currentOffsetNegative));
+    float shortestDistance = min(positiveDistance, negativeDistance);
+    float edgeBlend = 0.5f - shortestDistance / (positiveDistance + negativeDistance);
+    float blendFactor = max(lowpassBlend, edgeBlend);
+    float3 edgeColor = g_SourceTexture.Load(int3(pixelCoordinates + edgePixelForBlendOffset, 0)).xyz;
+
+    g_TargetTexture[pixelCoordinates] = float4(lerp(lowpassColor, edgeColor, blendFactor), 1.0f);
 }
