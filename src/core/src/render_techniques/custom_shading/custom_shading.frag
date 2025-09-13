@@ -28,16 +28,6 @@ struct Pixel
     float4 radiance : SV_Target0;
 };
 
-float3 tonemap(float3 radiance)
-{
-    return radiance / (1.0f + radiance);
-}
-
-float3 applyInverseGamma(float3 color)
-{
-    return pow(color, 1.0f / 2.2f);
-}
-
 float3 calculateFresnelSchlick(float VdotH, float3 F0)
 {
     return F0 + (1.0f - F0) * pow(saturate(1.0f - VdotH), 5.0f);

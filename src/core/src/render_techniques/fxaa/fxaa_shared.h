@@ -7,10 +7,6 @@
 
 struct FXAAConstants
 {
-    float4x4 viewProjection;
-    float4x4 invViewProjection;
-    float3   cameraPosition;
-    float    radius;
     // .xy - screenSize, .zw - invScreenSize
     float4   screenSize;
 };

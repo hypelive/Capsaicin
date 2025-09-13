@@ -4,6 +4,8 @@
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
+static constexpr std::string_view TARGET_TEXTURE_NAME = "ShadingResult";
+
 namespace Capsaicin
 {
 CustomToneMapping::CustomToneMapping()
@@ -42,6 +44,7 @@ SharedBufferList CustomToneMapping::getSharedBuffers() const noexcept
 SharedTextureList CustomToneMapping::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
+    textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::ReadWrite});
     return textures;
 }
 
@@ -61,17 +64,14 @@ bool CustomToneMapping::init([[maybe_unused]] CapsaicinInternal const &capsaicin
 
 void CustomToneMapping::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    m_options                = convertOptions(capsaicin.getOptions());
-    const auto &depthTexture = capsaicin.getSharedTexture("DepthCopy");
+    m_options                 = convertOptions(capsaicin.getOptions());
+    auto const &targetTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
 
-    const glm::vec2 renderResolution = {depthTexture.getWidth(), depthTexture.getHeight()};
+    const glm::vec2 renderResolution = {targetTexture.getWidth(), targetTexture.getHeight()};
     auto const &    gpuDrawConstants = capsaicin.allocateConstantBuffer<ToneMapConstants>(1);
     {
-        ToneMapConstants drawConstants  = {};
-        drawConstants.viewProjection    = capsaicin.getCameraMatrices().view_projection;
-        drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
-        drawConstants.cameraPosition    = capsaicin.getCamera().eye;
-        drawConstants.screenSize        = glm::vec4{renderResolution.x, renderResolution.y,
+        ToneMapConstants drawConstants = {};
+        drawConstants.screenSize       = glm::vec4{renderResolution.x, renderResolution.y,
                                              1.0f / renderResolution.x,
                                              1.0f / renderResolution.y};
 
@@ -79,7 +79,10 @@ void CustomToneMapping::render([[maybe_unused]] CapsaicinInternal &capsaicin) no
     }
 
     // Set the root parameters for Computing CustomToneMapping.
-    { }
+    {
+        gfxProgramSetParameter(gfx_, m_program, "g_Constants", gpuDrawConstants);
+        gfxProgramSetParameter(gfx_, m_program, "g_TargetTexture", targetTexture);
+    }
 
     // Compute CustomToneMapping.
     {

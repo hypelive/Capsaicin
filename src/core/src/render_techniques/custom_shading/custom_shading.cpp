@@ -4,6 +4,8 @@
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
 
+static constexpr std::string_view TARGET_TEXTURE_NAME = "ShadingResult";
+
 namespace Capsaicin
 {
 CustomShading::CustomShading()
@@ -50,7 +52,7 @@ SharedTextureList CustomShading::getSharedTextures() const noexcept
     textures.push_back({"DepthCopy", SharedTexture::Access::Read});
     textures.push_back({"Depth", SharedTexture::Access::Read});
     textures.push_back({"AO", SharedTexture::Access::Read});
-    textures.push_back({"ShadingResult", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
+    textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write, SharedTexture::Flags::Clear,
                         DXGI_FORMAT_R16G16B16A16_FLOAT});
     return textures;
 }
@@ -71,7 +73,8 @@ bool CustomShading::init([[maybe_unused]] CapsaicinInternal const &capsaicin) no
     gfxDrawStateSetDepthFunction(shadingDrawState, D3D12_COMPARISON_FUNC_LESS);
     gfxDrawStateSetDepthWriteMask(shadingDrawState, D3D12_DEPTH_WRITE_MASK_ZERO);
 
-    gfxDrawStateSetColorTarget(shadingDrawState, 0, capsaicin.getSharedTexture("Color").getFormat());
+    gfxDrawStateSetColorTarget(
+        shadingDrawState, 0, capsaicin.getSharedTexture(TARGET_TEXTURE_NAME).getFormat());
     gfxDrawStateSetDepthStencilTarget(shadingDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
     m_shadingKernel =
@@ -82,7 +85,7 @@ bool CustomShading::init([[maybe_unused]] CapsaicinInternal const &capsaicin) no
 
 void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    auto const &targetTexture = capsaicin.getSharedTexture("ShadingResults");
+    auto const &targetTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
 
     auto const &gpuDrawConstants = capsaicin.allocateConstantBuffer<ShadingConstants>(1);
     {

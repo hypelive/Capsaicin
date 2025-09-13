@@ -2,8 +2,10 @@
 #include "custom_shading/custom_shading.h"
 #include "custom_visibility_buffer/custom_visibility_buffer.h"
 #include "custom_skybox/custom_skybox.h"
+#include "custom_tone_mapping/custom_tone_mapping.h"
 #include "custom_visibility_to_gbuffer/custom_visibility_to_gbuffer.h"
 #include "depth_copy/depth_copy.h"
+#include "fxaa/fxaa.h"
 #include "ssao/ssao.h"
 
 namespace Capsaicin
@@ -35,6 +37,8 @@ public:
         render_techniques.emplace_back(std::make_unique<SSAO>());
         render_techniques.emplace_back(std::make_unique<CustomShading>());
         render_techniques.emplace_back(std::make_unique<CustomSkybox>());
+        render_techniques.emplace_back(std::make_unique<CustomToneMapping>());
+        render_techniques.emplace_back(std::make_unique<FXAA>());
         return render_techniques;
     }
 };

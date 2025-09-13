@@ -3,6 +3,8 @@
 #include "custom_skybox_shared.h"
 #include "components/probe_baker/probe_baker.h"
 
+static constexpr std::string_view TARGET_TEXTURE_NAME = "ShadingResult";
+
 namespace Capsaicin
 {
 CustomSkybox::CustomSkybox()
@@ -41,7 +43,7 @@ SharedBufferList CustomSkybox::getSharedBuffers() const noexcept
 SharedTextureList CustomSkybox::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::Write});
+    textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write});
     textures.push_back({"Depth", SharedTexture::Access::ReadWrite});
     return textures;
 }
@@ -61,7 +63,7 @@ bool CustomSkybox::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noe
     gfxDrawStateSetDepthFunction(skyboxDrawState, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
-        skyboxDrawState, 0, capsaicin.getSharedTexture("Color").getFormat());
+        skyboxDrawState, 0, capsaicin.getSharedTexture(TARGET_TEXTURE_NAME).getFormat());
     gfxDrawStateSetDepthStencilTarget(
         skyboxDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
@@ -72,7 +74,7 @@ bool CustomSkybox::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noe
 
 void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    auto const &colorTexture = capsaicin.getSharedTexture("Color");
+    auto const &colorTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
 
     const auto &drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
     // Filling the draw constants.
