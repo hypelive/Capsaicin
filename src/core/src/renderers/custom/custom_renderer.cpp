@@ -7,6 +7,7 @@
 #include "depth_copy/depth_copy.h"
 #include "fxaa/fxaa.h"
 #include "ssao/ssao.h"
+#include "virtual_shadow_map/virtual_shadow_map.h"
 
 namespace Capsaicin
 {
@@ -33,6 +34,7 @@ public:
         std::vector<std::unique_ptr<RenderTechnique>> render_techniques;
         render_techniques.emplace_back(std::make_unique<CustomVisibilityBuffer>());
         render_techniques.emplace_back(std::make_unique<DepthCopy>());
+        render_techniques.emplace_back(std::make_unique<VirtualShadowMap>());
         render_techniques.emplace_back(std::make_unique<CustomVisibilityToGBuffer>());
         render_techniques.emplace_back(std::make_unique<SSAO>());
         render_techniques.emplace_back(std::make_unique<CustomShading>());

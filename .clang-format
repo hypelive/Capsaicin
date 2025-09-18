@@ -98,7 +98,7 @@ MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PPIndentWidth: -1
 PackConstructorInitializers: Never
-PointerAlignment: Right
+PointerAlignment: Left
 QualifierAlignment: Custom
 QualifierOrder: ['inline', 'static', 'constexpr', 'volatile', 'type', 'restrict', 'const' ]
 ReferenceAlignment: Pointer
@@ -140,5 +140,6 @@ SpacesInSquareBrackets: false
 TabWidth: 4
 UseCRLF: false
 UseTab: Never
+ConstPlacement : Left
 ...
 
