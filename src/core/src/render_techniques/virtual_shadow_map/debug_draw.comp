@@ -3,26 +3,14 @@
 
 ConstantBuffer<VSMConstants> g_Constants;
 Texture2D<float> g_DepthCopy;
+Texture2D<uint> g_VirtualPageTable;
 RWTexture2D<float4> g_TargetTexture;
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
-    uint2 pixelCoordinates = did;
-    if (any(pixelCoordinates >= g_Constants.screenSize.xy))
-    {
-        return;
-    }
+    uint isVirtualPageVisible = g_VirtualPageTable.Load(int3(gid, 0));
+    float4 color = isVirtualPageVisible ? float4(1,1,1,1) : float4(0,0,0,1);
 
-    float2 uv = (float2(pixelCoordinates) + 0.5f) * g_Constants.screenSize.zw;
-    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
-    float depth = g_DepthCopy.Load(int3(pixelCoordinates, 0));
-
-    float4 worldPosition = mul(g_Constants.invViewProjection, float4(ndc, depth, 1.0f));
-    worldPosition /= worldPosition.w;
-
-    float4 lightNdc = mul(g_Constants.lightViewProjection, worldPosition);
-    lightNdc.xyz /= lightNdc.w;
-
-    g_TargetTexture[pixelCoordinates] = float4(lightNdc.xyz, 1.0f); 
+    g_TargetTexture[did] = color; 
 }

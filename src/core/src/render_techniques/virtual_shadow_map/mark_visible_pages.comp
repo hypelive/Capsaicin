@@ -1,0 +1,47 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+
+ConstantBuffer<VSMConstants> g_Constants;
+Texture2D<float> g_DepthCopy;
+RWTexture2D<uint> g_VirtualPageTable;
+// TODO remove
+RWTexture2D<float4> g_TargetTexture;
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    uint2 pixelCoordinates = did;
+    if (any(pixelCoordinates >= g_Constants.screenSize.xy))
+    {
+        return;
+    }
+
+    // TODO function to reconstruct world post.
+    float2 uv = (float2(pixelCoordinates) + 0.5f) * g_Constants.screenSize.zw;
+    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
+    float depth = g_DepthCopy.Load(int3(pixelCoordinates, 0));
+
+    float4 worldPosition = mul(g_Constants.invViewProjection, float4(ndc, depth, 1.0f));
+    worldPosition /= worldPosition.w;
+
+    float distanceToCamera = length(worldPosition.xyz - g_Constants.cameraPosition);
+    if (distanceToCamera > CASCADE_SIZE_0)
+    {
+        return;
+    }
+
+    float4 lightNdc = mul(g_Constants.lightViewProjection, worldPosition);
+    lightNdc.xyz /= lightNdc.w;
+
+    // Translation to the Sample Light NDC.
+    lightNdc.xy -= g_Constants.lightViewProjection._m03_m13;
+
+    float2 lightSpaceUv = lightNdc.xy * float2(0.5f, -0.5f) + 0.5f;
+    lightSpaceUv = frac(lightSpaceUv);
+
+    const uint2 pageCoordinates = lightSpaceUv * PAGE_TABLE_RESOLUTION;
+    uint orig;
+    InterlockedOr(g_VirtualPageTable[pageCoordinates], 1, orig);
+
+    g_TargetTexture[pixelCoordinates] = float4(depth.x, 0, 0, 1);
+}

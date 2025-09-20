@@ -83,6 +83,12 @@ public:
 private:
     RenderOptions m_options;
 
+    GfxTexture m_virtualPageTable;
+    GfxTexture m_physicalMemory;
+
+    GfxProgram m_markVisiblePagesProgram;
+    GfxKernel  m_markVisiblePagesKernel;
+
     GfxProgram m_debugProgram;
     GfxKernel  m_debugKernel;
 };

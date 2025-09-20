@@ -1,8 +1,6 @@
 #include "custom_visibility_buffer.h"
 #include "capsaicin_internal.h"
 #include "custom_visibility_buffer_shared.h"
-#include "components/custom_light_builder/custom_light_builder.h"
-#include "components/probe_baker/probe_baker.h"
 
 namespace Capsaicin
 {

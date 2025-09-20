@@ -55,10 +55,17 @@ DebugViewList VirtualShadowMap::getDebugViews() const noexcept
 
 bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin) noexcept
 {
+    m_virtualPageTable = gfxCreateTexture2D(gfx_, (uint32_t)PAGE_TABLE_RESOLUTION,
+        (uint32_t)PAGE_TABLE_RESOLUTION, DXGI_FORMAT_R32_UINT);
+
+    m_markVisiblePagesProgram = capsaicin.createProgram(
+        "render_techniques/virtual_shadow_map/mark_visible_pages");
+    m_markVisiblePagesKernel = gfxCreateComputeKernel(gfx_, m_markVisiblePagesProgram);
+
     m_debugProgram = capsaicin.createProgram("render_techniques/virtual_shadow_map/debug_draw");
     m_debugKernel  = gfxCreateComputeKernel(gfx_, m_debugProgram);
 
-    return m_debugKernel;
+    return m_markVisiblePagesKernel && m_debugKernel;
 }
 
 void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
@@ -69,48 +76,59 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
     const glm::vec2 renderResolution = {targetTexture.getWidth(), targetTexture.getHeight()};
     auto const&     gpuDrawConstants = capsaicin.allocateConstantBuffer<VSMConstants>(1);
     {
-        const auto& cameraMatrices   = capsaicin.getCameraMatrices();
-        const auto& camera           = capsaicin.getCamera();
-        const auto& directionalLightDirection = capsaicin.getComponent<CustomLightBuilder>()->m_directionalLightDirection;
+        const auto& cameraMatrices            = capsaicin.getCameraMatrices();
+        const auto& camera                    = capsaicin.getCamera();
+        const auto& directionalLightDirection = capsaicin.getComponent<CustomLightBuilder>()->
+                                                          m_directionalLightDirection;
 
-        const float PAGE_STEP_0          = 0.25f;
-        const float CASCADE_SIZE_0       = 1.0f;
-        const float CASCADE_HALF_SIZE_0  = CASCADE_SIZE_0 / 2.0f;
-        glm::vec3   shadowCameraPosition = PAGE_STEP_0 * glm::round(camera.eye / PAGE_STEP_0);
+        const auto defaultLightView = glm::lookAt(glm::vec3{0.0f}, -directionalLightDirection,
+            glm::vec3{0.0f, 0.0f, 1.0f});
+        const auto lightProjection = glm::ortho(-CASCADE_SIZE_0, CASCADE_SIZE_0, -CASCADE_SIZE_0,
+            CASCADE_SIZE_0, -1000.0f, 1000.0f);
 
-        // TODO light must be in the origin to calculate wrapped NDC.
-        glm::mat4x4 lightView = glm::lookAt(
-            shadowCameraPosition + 10.0f * directionalLightDirection,
-            shadowCameraPosition,
-            {0.0f, 1.0f, 0.0f});
+        const auto defaultLightViewProjection = lightProjection * defaultLightView;
 
-        glm::vec3 cascadeCorners[4] = {shadowCameraPosition + CASCADE_HALF_SIZE_0,
-                                       shadowCameraPosition - CASCADE_HALF_SIZE_0,
-                                       shadowCameraPosition + glm::vec3{
-                                           CASCADE_HALF_SIZE_0, -CASCADE_HALF_SIZE_0, 0.0f},
-                                       shadowCameraPosition + glm::vec3{
-                                           -CASCADE_HALF_SIZE_0, CASCADE_HALF_SIZE_0, 0.0f}};
-        glm::vec3 min{std::numeric_limits<float>::max()};
-        glm::vec3 max{-std::numeric_limits<float>::max()};
-        for (const auto cascadeCorner : cascadeCorners)
-        {
-            const glm::vec3 cornerViewSpace = lightView * glm::vec4{cascadeCorner.x, cascadeCorner.y, cascadeCorner.z, 1.0f};
-            min = glm::min(min, cornerViewSpace);
-            max = glm::max(max, cornerViewSpace);
-        }
+        auto cameraPositionNDC = defaultLightViewProjection * glm::vec4{camera.eye, 1.0f};
 
-        const glm::mat4x4 lightProjection = glm::ortho(min.x, max.x, min.y, max.y, 0.0f, max.z);
+        glm::vec2 cameraPageOffset =
+            glm::ceil(glm::vec2{cameraPositionNDC.x, cameraPositionNDC.y} / PAGE_NDC);
+        glm::vec2 alignedCameraPositionNDC        = cameraPageOffset * PAGE_NDC;
+        glm::vec4 alignedCameraPositionWorldSpace = glm::inverse(defaultLightViewProjection) * glm::vec4{
+                                                        alignedCameraPositionNDC, cameraPositionNDC.z, 1.0f};
+
+        glm::vec3 shadowCameraWorldPosition =
+            glm::vec3{alignedCameraPositionWorldSpace} + directionalLightDirection * 5.0f;
+        glm::mat4x4 lightView = glm::lookAt(shadowCameraWorldPosition,
+            shadowCameraWorldPosition - directionalLightDirection, glm::vec3{0.0f, 0.0f, 1.0f});
+        glm::mat4x4 lightViewProjection = lightProjection * lightView;
 
         VSMConstants drawConstants        = {};
         drawConstants.viewProjection      = cameraMatrices.view_projection;
         drawConstants.invViewProjection   = cameraMatrices.inv_view_projection;
-        drawConstants.lightViewProjection = lightProjection * lightView;
+        drawConstants.lightViewProjection = lightViewProjection;
         drawConstants.cameraPosition      = camera.eye;
         drawConstants.screenSize          = glm::vec4{renderResolution.x, renderResolution.y,
-                                                    1.0f / renderResolution.x,
-                                                    1.0f / renderResolution.y};
+                                                      1.0f / renderResolution.x,
+                                                      1.0f / renderResolution.y};
+        drawConstants.alignedLightPositionNDC = glm::vec4{alignedCameraPositionNDC, cameraPositionNDC.z, 0};
+        drawConstants.cameraPageOffset        = glm::vec4{cameraPageOffset.x, cameraPageOffset.y, 1.0f, 1.0f};
 
         gfxBufferGetData<VSMConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
+    }
+
+    {
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_Constants", gpuDrawConstants);
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_DepthCopy",
+            capsaicin.getSharedTexture("DepthCopy"));
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VirtualPageTable", m_virtualPageTable);
+    }
+
+    {
+        gfxCommandBindKernel(gfx_, m_markVisiblePagesKernel);
+
+        glm::uvec2 const groupCount =
+            ceil(renderResolution / static_cast<float>(TILE_SIZE));
+        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 
     // Set the root parameters for Computing VirtualShadowMap.
@@ -118,15 +136,14 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_Constants", gpuDrawConstants);
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_DepthCopy", capsaicin.getSharedTexture("DepthCopy"));
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_TargetTexture", targetTexture);
+        gfxProgramSetParameter(gfx_, m_debugProgram, "g_VirtualPageTable", m_virtualPageTable);
     }
 
     // Compute VirtualShadowMap.
     {
         gfxCommandBindKernel(gfx_, m_debugKernel);
 
-        glm::uvec2 const groupCount =
-            ceil(renderResolution / static_cast<float>(TILE_SIZE));
-        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
+        gfxCommandDispatch(gfx_, static_cast<uint32_t>(PAGE_TABLE_RESOLUTION), static_cast<uint32_t>(PAGE_TABLE_RESOLUTION), 1);
     }
 
     gfxDestroyBuffer(gfx_, gpuDrawConstants);

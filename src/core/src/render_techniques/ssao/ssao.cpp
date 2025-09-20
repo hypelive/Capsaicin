@@ -1,8 +1,6 @@
 #include "ssao.h"
 #include "capsaicin_internal.h"
 #include "ssao_shared.h"
-#include "components/custom_light_builder/custom_light_builder.h"
-#include "components/probe_baker/probe_baker.h"
 
 namespace Capsaicin
 {
