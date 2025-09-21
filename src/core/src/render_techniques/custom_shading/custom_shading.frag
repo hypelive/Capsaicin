@@ -4,6 +4,7 @@
 #include "math/pack.hlsl"
 #include "math/transform.hlsl"
 #include "lights/lights.hlsl"
+#include "shadows/shared.h"
 
 Texture2D g_TextureMaps[] : register(space99);
 SamplerState g_TextureSampler;
@@ -11,6 +12,7 @@ SamplerState g_TextureSampler;
 #include "materials/materials.hlsl"
 
 ConstantBuffer<ShadingConstants> g_DrawConstants;
+ConstantBuffer<ShadowConstants> g_ShadowConstants;
 Texture2D<float4> g_GBuffer0;
 Texture2D<float4> g_GBuffer1;
 Texture2D<float4> g_GBuffer2;
@@ -21,6 +23,9 @@ StructuredBuffer<Light> g_LightsBuffer;
 TextureCube<float4> g_IrradianceProbe;
 TextureCube<float4> g_PrefilteredEnvironmentMap;
 Texture2D<float2> g_BrdfLut;
+// TODO rename
+Texture2D<uint> g_VirtualPageTable;
+Texture2D<uint> g_PhysicalPages;
 SamplerState g_LinearSampler;
 
 struct Pixel
@@ -87,8 +92,28 @@ float3 calculateDirectLighting(MaterialBRDF material, float3 normal, float3 view
     // Evaluate directional lights.
     for (uint lightIndex = 0u; lightIndex < g_LightsBufferInfo.directionalLightsCount; ++lightIndex)
     {
+        // TODO create separate function
+        float shadowFactor = 1.0f;
+        {
+            float3 virtualTextureUvDepth = calculateVirtualTextureCoordinates(worldPosition, g_ShadowConstants.viewProjection);
+            uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUvDepth.xy;
+            uint2 pageTableCoordinates = virtualTextureCoordinates / PAGE_RESOLUTION_UINT;
+            uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
+
+            uint virtualPageData = g_VirtualPageTable[pageTableCoordinates];
+            if (virtualPageData)
+            {
+                uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
+                float shadowMapDepth = asfloat(g_PhysicalPages.Load(int3(PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage, 0)));
+                if (virtualTextureUvDepth.z > shadowMapDepth)
+                {
+                    shadowFactor = 0.0f;
+                }
+            }
+        }
+
         const LightDirectional directionalLight = MakeLightDirectional(g_LightsBuffer[lightIndex]);
-        radiance += calculateDirectRadianceForLight(material, normal, viewDirection,
+        radiance += shadowFactor * calculateDirectRadianceForLight(material, normal, viewDirection,
             directionalLight.direction, directionalLight.irradiance);
     }
 

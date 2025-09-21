@@ -83,8 +83,6 @@ public:
 private:
     RenderOptions m_options;
 
-    GfxTexture m_virtualPageTable;
-    GfxTexture m_physicalPages;
     GfxBuffer  m_allocationsState;
     GfxBuffer  m_drawDataBuffer;
     GfxBuffer  m_drawConstantsBuffer;

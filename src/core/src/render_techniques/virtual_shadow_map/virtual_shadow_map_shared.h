@@ -79,8 +79,6 @@ struct VSMConstants
     float4   screenSize;
     float3   cameraPosition;
     uint     padding;
-    float4   alignedLightPositionNDC;
-    float4   cameraPageOffset;
     uint4    viewport;
 };
 

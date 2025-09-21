@@ -56,7 +56,9 @@ float4 main(in VertexParams params, in PrimParams primitiveParams) : SV_Target0
 
     uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
     uint oldValue;
-    InterlockedMin(g_PhysicalPages[PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage], asuint(params.screenPosition.z), oldValue);
+    // TODO add slope bias
+    const float BIAS = 1e-3f;
+    InterlockedMin(g_PhysicalPages[PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage], asuint(params.screenPosition.z + BIAS), oldValue);
 
     return float4(params.screenPosition.zzz,1);
 }

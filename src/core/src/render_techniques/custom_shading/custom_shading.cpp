@@ -3,6 +3,8 @@
 #include "custom_shading_shared.h"
 #include "components/custom_light_builder/custom_light_builder.h"
 #include "components/probe_baker/probe_baker.h"
+#include "components/shadow_structures/shadow_structures.h"
+#include "shadows/shared.h"
 
 static constexpr std::string_view TARGET_TEXTURE_NAME = "HDRColor";
 
@@ -34,6 +36,7 @@ ComponentList CustomShading::getComponents() const noexcept
     ComponentList components;
     components.emplace_back("ProbeBaker");
     components.emplace_back("CustomLightBuilder");
+    components.emplace_back("ShadowStructures");
     return components;
 }
 
@@ -98,9 +101,18 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
         gfxBufferGetData<ShadingConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
 
+    auto const& gpuShadowConstants = capsaicin.allocateConstantBuffer<ShadowConstants>(1);
+    {
+        ShadowConstants shadowConstants = {};
+        shadowConstants.viewProjection = capsaicin.getComponent<ShadowStructures>()->m_lightViewProjection;
+
+        gfxBufferGetData<ShadowConstants>(gfx_, gpuShadowConstants)[0] = shadowConstants;
+    }
+
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_DrawConstants", gpuDrawConstants);
+        gfxProgramSetParameter(gfx_, m_shadingProgram, "g_ShadowConstants", gpuShadowConstants);
 
         gfxProgramSetParameter(gfx_, m_shadingProgram, "g_InstanceBuffer",
             capsaicin.getInstanceBuffer());
@@ -137,6 +149,7 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
 
         capsaicin.getComponent<ProbeBaker>()->addProgramParameters(capsaicin, m_shadingProgram);
         capsaicin.getComponent<CustomLightBuilder>()->addProgramParameters(capsaicin, m_shadingProgram);
+        capsaicin.getComponent<ShadowStructures>()->addProgramParameters(capsaicin, m_shadingProgram);
     }
 
     {
@@ -148,6 +161,7 @@ void CustomShading::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexce
     }
 
     gfxDestroyBuffer(gfx_, gpuDrawConstants);
+    gfxDestroyBuffer(gfx_, gpuShadowConstants);
 }
 
 void CustomShading::terminate() noexcept
