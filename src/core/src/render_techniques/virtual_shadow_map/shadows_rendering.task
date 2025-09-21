@@ -1,0 +1,27 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/transform.hlsl"
+#include "math/pack.hlsl"
+
+StructuredBuffer<RenderingConstants> g_DrawConstants;
+StructuredBuffer<DrawData> g_DrawDataBuffer;
+
+groupshared MeshPayload meshPayload;
+
+#define AMPLIFICATION_GROUP_SIZE 32
+
+[NumThreads(AMPLIFICATION_GROUP_SIZE, 1, 1)]
+void main(uint dtid : SV_DispatchThreadID, uint gtid : SV_GroupThreadID)
+{
+    float visible = false;
+    if (dtid < g_DrawConstants[0].drawCount)
+    {
+        DrawData drawData = g_DrawDataBuffer[dtid];
+        meshPayload.meshletIndex[gtid] = drawData.meshletIndex;
+        meshPayload.instanceIndex[gtid] = drawData.instanceIndex;
+
+        visible = true;
+    }
+
+    uint visibleCount = WaveActiveCountBits(visible);   
+    DispatchMesh(visibleCount, 1, 1, meshPayload);
+}

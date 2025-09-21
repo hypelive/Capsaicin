@@ -1,0 +1,23 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
+RWTexture2D<uint> g_VirtualPageTable;
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    if (any(did > PAGE_TABLE_RESOLUTION))
+    {
+        return;
+    }
+
+    uint isVisible = g_VirtualPageTable[did];
+    if (isVisible)
+    {
+        uint physicalPageIndex;
+        InterlockedAdd(g_AllocationsState[0].allocationIndex, 1, physicalPageIndex);
+
+        g_VirtualPageTable[did] = packVPTInfo(physicalPageIndex);
+    }
+}

@@ -9,8 +9,14 @@ RWTexture2D<float4> g_TargetTexture;
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
-    uint isVirtualPageVisible = g_VirtualPageTable.Load(int3(gid, 0));
-    float4 color = isVirtualPageVisible ? float4(1,1,1,1) : float4(0,0,0,1);
+    if (any(g_Constants.viewport.xy + did > g_Constants.screenSize.xy))
+    {
+        return;
+    }
 
-    g_TargetTexture[did] = color; 
+    uint virtualPageData = g_VirtualPageTable.Load(int3(gid, 0));
+    uint2 unpackedData = unpackVPTInfo(virtualPageData);
+    float4 color = virtualPageData ? float4(unpackedData / 32.0f, 0, 1) : float4(0,0,0,1);
+
+    g_TargetTexture[g_Constants.viewport.xy + did] = color; 
 }

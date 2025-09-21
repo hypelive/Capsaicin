@@ -25,7 +25,6 @@ struct MeshPayload
 
 #endif
 
-// TODO rename this to avoid type shuffle.
 struct VisibilityBufferConstants
 {
     float4x4 viewProjection;

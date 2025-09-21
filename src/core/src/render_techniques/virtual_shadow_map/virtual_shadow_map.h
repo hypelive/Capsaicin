@@ -84,12 +84,20 @@ private:
     RenderOptions m_options;
 
     GfxTexture m_virtualPageTable;
-    GfxTexture m_physicalMemory;
+    GfxTexture m_physicalPages;
+    GfxBuffer  m_allocationsState;
+    GfxBuffer  m_drawDataBuffer;
+    GfxBuffer  m_drawConstantsBuffer;
 
     GfxProgram m_markVisiblePagesProgram;
     GfxKernel  m_markVisiblePagesKernel;
+    GfxProgram m_allocatePhysicalPagesProgram;
+    GfxKernel  m_allocatePhysicalPagesKernel;
+    GfxProgram m_renderingProgram;
+    GfxKernel  m_renderingKernel;
 
     GfxProgram m_debugProgram;
     GfxKernel  m_debugKernel;
+    GfxTexture m_debugTexture;
 };
 } // namespace Capsaicin
