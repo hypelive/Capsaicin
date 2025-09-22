@@ -47,12 +47,16 @@ public:
      * @param program   The shader program to bind parameters to.
      */
 
-    void addProgramParameters(CapsaicinInternal const& capsaicin, GfxProgram const& program) const noexcept;
+    void addShadingParameters(CapsaicinInternal const& capsaicin, GfxProgram const& program) const noexcept;
     void clearResources();
+
+    const GfxTexture& getVirtualPageTable() const { return m_virtualPageTable; }
+    const GfxTexture& getPhysicalPages() const { return m_physicalPages; }
 
     glm::mat4x4 m_lightViewProjection;
 
 private:
+    GfxBuffer  m_shadowConstants;
     GfxTexture m_virtualPageTable;
     GfxTexture m_physicalPages;
 };

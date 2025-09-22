@@ -37,9 +37,6 @@ void CustomLightBuilder::run([[maybe_unused]] CapsaicinInternal &capsaicin) noex
                 cpuLightBufferInfo.directionalLightsCount++;
                 m_cpuLightsBuffer.push_back(MakeDirectionalLight(gfxLight.color * gfxLight.intensity,
                     normalize(gfxLight.direction), gfxLight.range));
-
-                // TODO support multiple directional lights.
-                m_directionalLightDirection = normalize(gfxLight.direction);
             }
         }
 

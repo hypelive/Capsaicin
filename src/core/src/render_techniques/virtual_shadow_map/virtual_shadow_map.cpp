@@ -121,9 +121,9 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_Constants", gpuDrawConstants);
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_DepthCopy",
             capsaicin.getSharedTexture("DepthCopy"));
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VirtualPageTableUav", shadowStructures->getVirtualPageTable());
         // TODO remove debug
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_TargetTexture", targetTexture);
-        shadowStructures->addProgramParameters(capsaicin, m_markVisiblePagesProgram);
 
         gfxCommandBindKernel(gfx_, m_markVisiblePagesKernel);
 
@@ -136,7 +136,8 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
     {
         gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_AllocationsState",
             m_allocationsState);
-        shadowStructures->addProgramParameters(capsaicin, m_allocatePhysicalPagesProgram);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_VirtualPageTableUav",
+            shadowStructures->getVirtualPageTable());
 
         gfxCommandBindKernel(gfx_, m_allocatePhysicalPagesKernel);
         const glm::uvec2 groupCount = {ceil(PAGE_TABLE_RESOLUTION / TILE_SIZE),
@@ -190,6 +191,10 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
             capsaicin.getVertexDataIndex());
         gfxProgramSetParameter(gfx_, m_renderingProgram, "g_MaterialBuffer",
             capsaicin.getMaterialBuffer());
+        gfxProgramSetParameter(gfx_, m_renderingProgram, "g_VirtualPageTable",
+            shadowStructures->getVirtualPageTable());
+        gfxProgramSetParameter(gfx_, m_renderingProgram, "g_PhysicalPagesUav",
+            shadowStructures->getPhysicalPages());
 
         auto const& textures = capsaicin.getTextures();
         gfxProgramSetParameter(gfx_, m_renderingProgram, "g_TextureMaps", textures.data(),
@@ -197,10 +202,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_renderingProgram, "g_LinearSampler",
             capsaicin.getLinearSampler());
 
-        shadowStructures->addProgramParameters(capsaicin, m_renderingProgram);
-
         // Run the amplification shader.
-        //gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
         gfxCommandSetViewport(gfx_, 0, 0, CASCADE_RESOLUTION, CASCADE_RESOLUTION);
         gfxCommandBindColorTarget(gfx_, 0, m_debugTexture);
         gfxCommandBindKernel(gfx_, m_renderingKernel);
@@ -219,7 +221,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_DepthCopy", capsaicin.getSharedTexture("DepthCopy"));
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_TargetTexture", targetTexture);
 
-        shadowStructures->addProgramParameters(capsaicin, m_debugProgram);
+        shadowStructures->addShadingParameters(capsaicin, m_debugProgram);
 
         gfxCommandBindKernel(gfx_, m_debugKernel);
 
@@ -232,6 +234,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
 
 void VirtualShadowMap::terminate() noexcept
 {
+    // TODO add all resources.
     gfxDestroyKernel(gfx_, m_debugKernel);
     m_debugKernel = {};
     gfxDestroyProgram(gfx_, m_debugProgram);

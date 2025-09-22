@@ -1,11 +1,11 @@
 #ifndef SHADOWS_H
 #define SHADOWS_H
 
-// Deduplicate these
+#include "gpu_shared.h"
+
 struct ShadowConstants
 {
     float4x4 viewProjection;
-    uint drawCount;
 };
 
 static const float CASCADE_RESOLUTION = 8.0f * 1024.0f;
@@ -20,6 +20,17 @@ static const float CASCADE_SIZE_0 = 16.0f;
 
 #ifndef __cplusplus
 
+// These parameters are set up through ShadowStructures component.
+ConstantBuffer<ShadowConstants> g_ShadowConstants;
+Texture2D<uint> g_VirtualPageTable;
+Texture2D<uint> g_PhysicalPages;
+
+bool isValid(uint data)
+{
+    return data != 0xFFFFFFFF;
+}
+
+// Zero is invalid, so real pages start from one.
 uint packVPTInfo(uint physicalPageIndex)
 {
     return ((physicalPageIndex % PAGE_TABLE_RESOLUTION_UINT) << 16) | ((physicalPageIndex / PAGE_TABLE_RESOLUTION_UINT) & 0xFFFF);
@@ -30,19 +41,7 @@ uint2 unpackVPTInfo(uint packed)
     return uint2(packed >> 16, packed & 0xFFFF);
 }
 
-float2 calculateVirtualTextureUv(float3 worldPosition, float4x4 lightViewProjection)
-{
-    float4 lightNdc = mul(lightViewProjection, float4(worldPosition, 1.0f));
-    // Translation to the Sample Light NDC.
-    lightNdc.xy -= lightViewProjection._m03_m13;
-
-    float2 lightSpaceUv = lightNdc.xy * float2(0.5f, -0.5f) + 0.5f;
-    lightSpaceUv = frac(lightSpaceUv);
-
-    return lightSpaceUv;
-}
-
-float3 calculateVirtualTextureCoordinates(float3 worldPosition, float4x4 lightViewProjection)
+float3 calculateVirtualTextureUv(float3 worldPosition, float4x4 lightViewProjection)
 {
     float4 lightNdc = mul(lightViewProjection, float4(worldPosition, 1.0f));
     // Translation to the Sample Light NDC.
@@ -52,6 +51,27 @@ float3 calculateVirtualTextureCoordinates(float3 worldPosition, float4x4 lightVi
     lightSpaceUv = frac(lightSpaceUv);
 
     return float3(lightSpaceUv, lightNdc.z);
+}
+
+float sampleShadowFactor(float3 worldPosition)
+{
+    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_ShadowConstants.viewProjection);
+    uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUv.xy;
+    uint2 pageTableCoordinates = virtualTextureCoordinates / PAGE_RESOLUTION_UINT;
+    uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
+
+    uint virtualPageData = g_VirtualPageTable[pageTableCoordinates];
+    if (isValid(virtualPageData))
+    {
+        uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
+        float shadowMapDepth = asfloat(g_PhysicalPages.Load(int3(PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage, 0)));
+        if (virtualTextureUv.z > shadowMapDepth)
+        {
+            return 0.0f;
+        }
+    }
+    
+    return 1.0f;
 }
 
 #endif

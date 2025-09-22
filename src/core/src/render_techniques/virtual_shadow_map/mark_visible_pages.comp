@@ -1,9 +1,10 @@
 #include "virtual_shadow_map_shared.h"
 #include "math/color.hlsl"
+#include "math/transform.hlsl"
 
 ConstantBuffer<VSMConstants> g_Constants;
 Texture2D<float> g_DepthCopy;
-RWTexture2D<uint> g_VirtualPageTable;
+RWTexture2D<uint> g_VirtualPageTableUav;
 // TODO remove
 RWTexture2D<float4> g_TargetTexture;
 
@@ -26,11 +27,11 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         return;
     }
 
-    float2 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_Constants.lightViewProjection);
+    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_Constants.lightViewProjection);
 
-    const uint2 pageCoordinates = virtualTextureUv * PAGE_TABLE_RESOLUTION;
+    const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
     uint orig;
-    InterlockedOr(g_VirtualPageTable[pageCoordinates], 1, orig);
+    InterlockedOr(g_VirtualPageTableUav[pageCoordinates], 1, orig);
 
     // TODO remove debug
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, 0, 1);

@@ -48,9 +48,6 @@ public:
      */
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
-    // TODO remove the default value.
-    glm::vec3 m_directionalLightDirection = glm::normalize(glm::vec3{1.0f});
-
 private:
     GfxBuffer          m_gpuLightsBufferInfo;
     GfxBuffer          m_gpuLightsBuffer;

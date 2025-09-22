@@ -8,8 +8,7 @@ SamplerState g_LinearSampler;
 StructuredBuffer<RenderingConstants> g_DrawConstants;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
-Texture2D<uint> g_VirtualPageTable;
-RWTexture2D<uint> g_PhysicalPages;
+RWTexture2D<uint> g_PhysicalPagesUav;
 
 void handleAlpha(Material material, float2 uv)
 {
@@ -42,23 +41,23 @@ float4 main(in VertexParams params, in PrimParams primitiveParams) : SV_Target0
 
     // TODO move culling to the earlier steps.
     float3 worldPosition = params.worldPosition;
-    float2 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_DrawConstants[0].viewProjection);
-    uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUv;
+    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_DrawConstants[0].viewProjection);
+    uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUv.xy;
     uint2 pageTableCoordinates = virtualTextureCoordinates / PAGE_RESOLUTION_UINT;
     uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
 
     uint virtualPageData = g_VirtualPageTable[pageTableCoordinates];
-    if (!virtualPageData)
+    if (!isValid(virtualPageData))
     {
         // Page isn't visible.
-        return float4(0,0,0,0);
+        return float4(0, 0, 0, 0);
     }
 
     uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
     uint oldValue;
     // TODO add slope bias
     const float BIAS = 1e-3f;
-    InterlockedMin(g_PhysicalPages[PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage], asuint(params.screenPosition.z + BIAS), oldValue);
+    InterlockedMin(g_PhysicalPagesUav[PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage], asuint(params.screenPosition.z + BIAS), oldValue);
 
     return float4(params.screenPosition.zzz,1);
 }

@@ -154,4 +154,14 @@ float4 toLinearDepth(float4 depth, float2 nearFar)
     return (nearFar.x * nearFar.y) / (nearFar.x + (depth * (nearFar.y - nearFar.x)));
 }
 
+float3 reconstructWorldPosition(float2 uv, float depth, float4x4 invViewProjection)
+{
+    float2 ndc = 2.0f * float2(uv.x, 1.0f - uv.y) - 1.0f;
+
+    float4 worldPosition = mul(invViewProjection, float4(ndc, depth, 1.0f));
+    worldPosition /= worldPosition.w;
+
+    return worldPosition.xyz;
+}
+
 #endif // MATH_HLSL

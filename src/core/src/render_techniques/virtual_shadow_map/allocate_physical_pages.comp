@@ -2,7 +2,7 @@
 #include "math/color.hlsl"
 
 RWStructuredBuffer<AllocationsState> g_AllocationsState;
-RWTexture2D<uint> g_VirtualPageTable;
+RWTexture2D<uint> g_VirtualPageTableUav;
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
@@ -12,12 +12,12 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         return;
     }
 
-    uint isVisible = g_VirtualPageTable[did];
-    if (isVisible)
+    uint isVisible = g_VirtualPageTableUav[did];
+    if (isValid(isVisible))
     {
         uint physicalPageIndex;
         InterlockedAdd(g_AllocationsState[0].allocationIndex, 1, physicalPageIndex);
 
-        g_VirtualPageTable[did] = packVPTInfo(physicalPageIndex);
+        g_VirtualPageTableUav[did] = packVPTInfo(physicalPageIndex);
     }
 }
