@@ -1,0 +1,15 @@
+#include "shadows/shared.h"
+#include "math/color.hlsl"
+
+RWTexture2D<uint> g_PhysicalPagesUav;
+
+[numthreads(16, 16, 1)]
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    if (any(did > CASCADE_RESOLUTION_UINT))
+    {
+        return;
+    }
+
+    g_PhysicalPagesUav[did] = asuint(PP_CLEAR_VALUE);
+}

@@ -59,5 +59,10 @@ private:
     GfxBuffer  m_shadowConstants;
     GfxTexture m_virtualPageTable;
     GfxTexture m_physicalPages;
+
+    GfxProgram m_vptClearProgram;
+    GfxKernel  m_vptClearKernel;
+    GfxProgram m_ppClearProgram;
+    GfxKernel  m_ppClearKernel;
 };
 } // namespace Capsaicin

@@ -30,9 +30,8 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_Constants.lightViewProjection);
 
     const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
-    uint orig;
-    InterlockedOr(g_VirtualPageTableUav[pageCoordinates], 1, orig);
+    g_VirtualPageTableUav[pageCoordinates] = 1;
 
     // TODO remove debug
-    g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, 0, 1);
+    g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);
 }

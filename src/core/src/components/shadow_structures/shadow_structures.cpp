@@ -14,14 +14,17 @@ ShadowStructures::~ShadowStructures() noexcept
 
 bool ShadowStructures::init([[maybe_unused]] CapsaicinInternal const& capsaicin) noexcept
 {
-    uint VPT_CLEAR = 0xFFFFFFFF;
     m_virtualPageTable = gfxCreateTexture2D(gfx_, PAGE_TABLE_RESOLUTION_UINT,
-        PAGE_TABLE_RESOLUTION_UINT, DXGI_FORMAT_R32_UINT, 1, reinterpret_cast<float*>(&VPT_CLEAR));
-    constexpr float PP_CLEAR = std::numeric_limits<float>::max();
-    m_physicalPages            = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
-        DXGI_FORMAT_R32_UINT, 1, &PP_CLEAR);
+        PAGE_TABLE_RESOLUTION_UINT, DXGI_FORMAT_R32_UINT);
+    m_physicalPages = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
+        DXGI_FORMAT_R32_UINT);
 
-    return true;
+    m_vptClearProgram = capsaicin.createProgram("components/shadow_structures/clear_virtual_pages");
+    m_vptClearKernel  = gfxCreateComputeKernel(gfx_, m_vptClearProgram);
+    m_ppClearProgram  = capsaicin.createProgram("components/shadow_structures/clear_physical_pages");
+    m_ppClearKernel   = gfxCreateComputeKernel(gfx_, m_ppClearProgram);
+
+    return m_vptClearKernel && m_ppClearKernel;
 }
 
 void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
@@ -45,10 +48,15 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
     // Calculate view projection matrix.
     const auto defaultLightView = glm::lookAt(glm::vec3{0.0f}, -directionalLightDirection,
         glm::vec3{0.0f, 0.0f, 1.0f});
-    const auto lightProjection = glm::ortho(-CASCADE_SIZE_0, CASCADE_SIZE_0, -CASCADE_SIZE_0,
-        CASCADE_SIZE_0, -50.0f, 50.0f);
+    const auto defaultLightProjection = glm::ortho(-CASCADE_SIZE_0, CASCADE_SIZE_0, -CASCADE_SIZE_0,
+        CASCADE_SIZE_0, -40.0f, 40.0f);
+    /*constexpr float MAX_DEPTH = 50.0f;
+    auto defaultLightProjection = glm::identity<glm::mat4x4>();
+    defaultLightProjection[0][0] = 2.0f / CASCADE_SIZE_0;
+    defaultLightProjection[1][1] = 2.0f / CASCADE_SIZE_0;
+    defaultLightProjection[2][2] = 1.0f / MAX_DEPTH;*/
 
-    const auto defaultLightViewProjection = lightProjection * defaultLightView;
+    const auto defaultLightViewProjection = defaultLightProjection * defaultLightView;
 
     const auto cameraPositionNDC = defaultLightViewProjection * glm::vec4{camera.eye, 1.0f};
 
@@ -63,8 +71,7 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
         glm::vec3{alignedCameraPositionWorldSpace} + directionalLightDirection * 5.0f;
     const glm::mat4x4 lightView = glm::lookAt(shadowCameraWorldPosition,
         shadowCameraWorldPosition - directionalLightDirection, glm::vec3{0.0f, 0.0f, 1.0f});
-    m_lightViewProjection = lightProjection * lightView;
-
+    m_lightViewProjection = defaultLightProjection * lightView;
 
     gfxDestroyBuffer(gfx_, m_shadowConstants);
     m_shadowConstants = capsaicin.allocateConstantBuffer<ShadowConstants>(1);
@@ -94,7 +101,22 @@ void ShadowStructures::addShadingParameters(
 
 void ShadowStructures::clearResources()
 {
-    gfxCommandClearTexture(gfx_, m_virtualPageTable);
-    gfxCommandClearTexture(gfx_, m_physicalPages);
+    gfxProgramSetParameter(gfx_, m_vptClearProgram, "g_VirtualPageTableUav", m_virtualPageTable);
+    gfxProgramSetParameter(gfx_, m_ppClearProgram, "g_PhysicalPagesUav", m_physicalPages);
+
+    const uint32_t*  numThreadsPtr = gfxKernelGetNumThreads(gfx_, m_vptClearKernel);
+    const glm::uvec3 numThreads    = {numThreadsPtr[0], numThreadsPtr[1], numThreadsPtr[2]};
+
+    const auto getGroupCount = [](uint32_t workSize, uint32_t groupSize) -> uint32_t {
+        return (workSize + groupSize - 1) / groupSize;
+    };
+
+    gfxCommandBindKernel(gfx_, m_vptClearKernel);
+    gfxCommandDispatch(gfx_, getGroupCount(m_virtualPageTable.getWidth(), numThreads.x),
+        getGroupCount(m_virtualPageTable.getHeight(), numThreads.y), 1);
+
+    gfxCommandBindKernel(gfx_, m_ppClearKernel);
+    gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),
+        getGroupCount(m_physicalPages.getHeight(), numThreads.y), 1);
 }
 } // namespace Capsaicin

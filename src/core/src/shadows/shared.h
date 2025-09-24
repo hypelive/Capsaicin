@@ -17,6 +17,8 @@ static const uint PAGE_TABLE_RESOLUTION_UINT = (uint)PAGE_TABLE_RESOLUTION;
 static const float PAGE_UV = PAGE_RESOLUTION / CASCADE_RESOLUTION;
 static const float PAGE_NDC = 2.0f * PAGE_UV;
 static const float CASCADE_SIZE_0 = 16.0f;
+static const uint VPT_CLEAR_VALUE = 0xFFFFFFFFu;
+static const float PP_CLEAR_VALUE = 1.0f;
 
 #ifndef __cplusplus
 
@@ -27,7 +29,7 @@ Texture2D<uint> g_PhysicalPages;
 
 bool isValid(uint data)
 {
-    return data != 0xFFFFFFFF;
+    return data != VPT_CLEAR_VALUE;
 }
 
 // Zero is invalid, so real pages start from one.

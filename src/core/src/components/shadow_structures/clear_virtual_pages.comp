@@ -1,0 +1,15 @@
+#include "shadows/shared.h"
+#include "math/color.hlsl"
+
+RWTexture2D<uint> g_VirtualPageTableUav;
+
+[numthreads(16, 16, 1)]
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    if (any(did > PAGE_TABLE_RESOLUTION))
+    {
+        return;
+    }
+
+    g_VirtualPageTableUav[did] = VPT_CLEAR_VALUE;
+}

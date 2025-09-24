@@ -218,7 +218,6 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
     // Debug
     {
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_Constants", gpuDrawConstants);
-        gfxProgramSetParameter(gfx_, m_debugProgram, "g_DepthCopy", capsaicin.getSharedTexture("DepthCopy"));
         gfxProgramSetParameter(gfx_, m_debugProgram, "g_TargetTexture", targetTexture);
 
         shadowStructures->addShadingParameters(capsaicin, m_debugProgram);
