@@ -45,16 +45,12 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
         }
     }
 
+    // TODO think about making Depth buffer more precise.
     // Calculate view projection matrix.
     const auto defaultLightView = glm::lookAt(glm::vec3{0.0f}, -directionalLightDirection,
         glm::vec3{0.0f, 0.0f, 1.0f});
     const auto defaultLightProjection = glm::ortho(-CASCADE_SIZE_0, CASCADE_SIZE_0, -CASCADE_SIZE_0,
         CASCADE_SIZE_0, -40.0f, 40.0f);
-    /*constexpr float MAX_DEPTH = 50.0f;
-    auto defaultLightProjection = glm::identity<glm::mat4x4>();
-    defaultLightProjection[0][0] = 2.0f / CASCADE_SIZE_0;
-    defaultLightProjection[1][1] = 2.0f / CASCADE_SIZE_0;
-    defaultLightProjection[2][2] = 1.0f / MAX_DEPTH;*/
 
     const auto defaultLightViewProjection = defaultLightProjection * defaultLightView;
 

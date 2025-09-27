@@ -22,16 +22,41 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
                                                     g_Constants.invViewProjection);
 
     float distanceToCamera = length(worldPosition - g_Constants.cameraPosition);
-    if (distanceToCamera > CASCADE_SIZE_0)
+    
+    float4 lightNdc = mul(g_Constants.lightViewProjection, float4(worldPosition, 1.0f));
+
+    float2 lightSpaceUv = (lightNdc.xy - g_Constants.lightViewProjection._m03_m13) * float2(0.5f, -0.5f) + 0.5f;
+    lightSpaceUv = frac(lightSpaceUv);
+
+    float3 virtualTextureUv = float3(lightSpaceUv, lightNdc.z);
+
+    uint clipmapIndex = max(
+        ceil(log2(max(abs(lightNdc.x), 1.0f))),
+        ceil(log2(max(abs(lightNdc.y), 1.0f)))
+    );
+
+    if (clipmapIndex == 0)
     {
-        return;
+        const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
+        g_VirtualPageTableUav[pageCoordinates] = 1;
     }
 
-    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_Constants.lightViewProjection);
-
-    const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
-    g_VirtualPageTableUav[pageCoordinates] = 1;
-
-    // TODO remove debug
+#if 0
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);
+#else
+
+    const float4 colors[8] =
+    {
+        float4(1.0, 0.0, 0.0, 1.0), // Red
+        float4(0.0, 1.0, 0.0, 1.0), // Green
+        float4(0.0, 0.0, 1.0, 1.0), // Blue
+        float4(1.0, 1.0, 0.0, 1.0), // Yellow
+        float4(1.0, 0.0, 1.0, 1.0), // Magenta
+        float4(0.0, 1.0, 1.0, 1.0), // Cyan
+        float4(1.0, 0.5, 0.0, 1.0), // Orange
+        float4(0.5, 0.0, 0.5, 1.0)  // Purple
+    };
+
+    g_TargetTexture[pixelCoordinates] = colors[clipmapIndex];
+#endif
 }
