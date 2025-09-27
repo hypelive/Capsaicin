@@ -9,6 +9,7 @@ StructuredBuffer<RenderingConstants> g_DrawConstants;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
 RWTexture2D<uint> g_PhysicalPagesUav;
+uint g_ClipmapIndex;
 
 void handleAlpha(Material material, float2 uv)
 {
@@ -41,12 +42,13 @@ float4 main(in VertexParams params, in PrimParams primitiveParams) : SV_Target0
 
     // TODO move culling to the earlier steps.
     float3 worldPosition = params.worldPosition;
-    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_DrawConstants[0].viewProjection);
+    float3 lightNdc = calculateLightNdc(worldPosition, g_DrawConstants[0].viewProjection, g_ClipmapIndex);
+    float3 virtualTextureUv = calculateVirtualTextureUv(lightNdc, g_DrawConstants[0].viewProjection, g_ClipmapIndex);
     uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUv.xy;
     uint2 pageTableCoordinates = virtualTextureCoordinates / PAGE_RESOLUTION_UINT;
     uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
 
-    uint virtualPageData = g_VirtualPageTable[pageTableCoordinates];
+    uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, g_ClipmapIndex)];
     if (!isValid(virtualPageData))
     {
         // Page isn't visible.

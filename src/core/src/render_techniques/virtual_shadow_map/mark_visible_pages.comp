@@ -4,7 +4,7 @@
 
 ConstantBuffer<VSMConstants> g_Constants;
 Texture2D<float> g_DepthCopy;
-RWTexture2D<uint> g_VirtualPageTableUav;
+RWTexture2DArray<uint> g_VirtualPageTableUav;
 // TODO remove
 RWTexture2D<float4> g_TargetTexture;
 
@@ -16,30 +16,30 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     {
         return;
     }
+    float depth = g_DepthCopy.Load(int3(pixelCoordinates, 0));
+    // Skip skybox.
+    if (depth <= 0.0f)
+    {
+        return;
+    }
 
     float3 worldPosition = reconstructWorldPosition((float2(pixelCoordinates) + 0.5f) * g_Constants.screenSize.zw,
-                                                    g_DepthCopy.Load(int3(pixelCoordinates, 0)),
-                                                    g_Constants.invViewProjection);
-
-    float distanceToCamera = length(worldPosition - g_Constants.cameraPosition);
+                                                    depth, g_Constants.invViewProjection);
     
-    float4 lightNdc = mul(g_Constants.lightViewProjection, float4(worldPosition, 1.0f));
-
-    float2 lightSpaceUv = (lightNdc.xy - g_Constants.lightViewProjection._m03_m13) * float2(0.5f, -0.5f) + 0.5f;
-    lightSpaceUv = frac(lightSpaceUv);
-
-    float3 virtualTextureUv = float3(lightSpaceUv, lightNdc.z);
-
-    uint clipmapIndex = max(
-        ceil(log2(max(abs(lightNdc.x), 1.0f))),
-        ceil(log2(max(abs(lightNdc.y), 1.0f)))
-    );
-
-    if (clipmapIndex == 0)
+    float3 lightNdc0 = calculateLightNdc(worldPosition, g_Constants.lightViewProjection, 0);
+    uint clipmapIndex = calculateClipmapIndexUnbound(lightNdc0);
+    if (clipmapIndex >= CASCADES_NUM_UINT)
     {
-        const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
-        g_VirtualPageTableUav[pageCoordinates] = 1;
+        return;
     }
+
+    float3 lightNdc = lightNdc0;
+    lightNdc.xy /= (1u << clipmapIndex);
+
+    float3 virtualTextureUv = calculateVirtualTextureUv(lightNdc, g_Constants.lightViewProjection, clipmapIndex);
+    const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
+
+    g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = 1;
 
 #if 0
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);

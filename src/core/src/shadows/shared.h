@@ -16,15 +16,21 @@ static const float PAGE_TABLE_RESOLUTION = CASCADE_RESOLUTION / PAGE_RESOLUTION;
 static const uint PAGE_TABLE_RESOLUTION_UINT = (uint)PAGE_TABLE_RESOLUTION;
 static const float PAGE_UV = PAGE_RESOLUTION / CASCADE_RESOLUTION;
 static const float PAGE_NDC = 2.0f * PAGE_UV;
-static const float CASCADE_SIZE_0 = 16.0f;
+static const float CASCADE_SIZE_0 = 2.0f;
+static const float CASCADES_NUM = 8.0f;
+static const uint CASCADES_NUM_UINT = (uint)CASCADES_NUM;
 static const uint VPT_CLEAR_VALUE = 0xFFFFFFFFu;
-static const float PP_CLEAR_VALUE = 1.0f;
+static const float PP_CLEAR_VALUE = 1024.0f * 1024.0f;
+
+// TODO remove this variable, allocate dynamically
+static const uint PHYSICAL_TEXTURE_RESOLUTION = CASCADE_RESOLUTION_UINT << 1u;
+static const uint PHYSICAL_PAGES_BUFFER_RESOLUTION = PHYSICAL_TEXTURE_RESOLUTION / PAGE_RESOLUTION_UINT;
 
 #ifndef __cplusplus
 
 // These parameters are set up through ShadowStructures component.
 ConstantBuffer<ShadowConstants> g_ShadowConstants;
-Texture2D<uint> g_VirtualPageTable;
+Texture2DArray<uint> g_VirtualPageTable;
 Texture2D<uint> g_PhysicalPages;
 
 bool isValid(uint data)
@@ -35,7 +41,7 @@ bool isValid(uint data)
 // Zero is invalid, so real pages start from one.
 uint packVPTInfo(uint physicalPageIndex)
 {
-    return ((physicalPageIndex % PAGE_TABLE_RESOLUTION_UINT) << 16) | ((physicalPageIndex / PAGE_TABLE_RESOLUTION_UINT) & 0xFFFF);
+    return ((physicalPageIndex % PHYSICAL_PAGES_BUFFER_RESOLUTION) << 16) | ((physicalPageIndex / PHYSICAL_PAGES_BUFFER_RESOLUTION) & 0xFFFF);
 }
 
 uint2 unpackVPTInfo(uint packed)
@@ -43,11 +49,17 @@ uint2 unpackVPTInfo(uint packed)
     return uint2(packed >> 16, packed & 0xFFFF);
 }
 
-float3 calculateVirtualTextureUv(float3 worldPosition, float4x4 lightViewProjection)
+float3 calculateLightNdc(float3 worldPosition, float4x4 lightViewProjection, uint clipmapIndex)
 {
-    float4 lightNdc = mul(lightViewProjection, float4(worldPosition, 1.0f));
+    float3 lightNdc = mul(lightViewProjection, float4(worldPosition, 1.0f)).xyz;
+    lightNdc.xy /= (float)(1u << clipmapIndex);
+    return lightNdc;
+}
+
+float3 calculateVirtualTextureUv(float3 lightNdc, float4x4 lightViewProjection, uint clipmapIndex)
+{
     // Translation to the Sample Light NDC.
-    lightNdc.xy -= lightViewProjection._m03_m13;
+    lightNdc.xy -= lightViewProjection._m03_m13 / (1u << clipmapIndex);
 
     float2 lightSpaceUv = lightNdc.xy * float2(0.5f, -0.5f) + 0.5f;
     lightSpaceUv = frac(lightSpaceUv);
@@ -55,14 +67,41 @@ float3 calculateVirtualTextureUv(float3 worldPosition, float4x4 lightViewProject
     return float3(lightSpaceUv, lightNdc.z);
 }
 
+uint calculateClipmapIndexUnbound(float3 lightNdc)
+{
+    return max(
+        ceil(log2(max(abs(lightNdc.x), 1.0f))),
+        ceil(log2(max(abs(lightNdc.y), 1.0f)))
+    );
+}
+
+uint calculateClipmapIndex(float3 lightNdc)
+{
+    uint clipmapIndex = calculateClipmapIndexUnbound(lightNdc);
+    clipmapIndex = min(CASCADES_NUM_UINT - 1, clipmapIndex);
+
+    return clipmapIndex;
+}
+
 float sampleShadowFactor(float3 worldPosition)
 {
-    float3 virtualTextureUv = calculateVirtualTextureUv(worldPosition, g_ShadowConstants.viewProjection);
+    float3 lightNdc0 = calculateLightNdc(worldPosition, g_ShadowConstants.viewProjection, 0);
+    uint clipmapIndex = calculateClipmapIndexUnbound(lightNdc0);
+
+    if (clipmapIndex >= CASCADES_NUM_UINT)
+    {
+        return 1.0f;
+    }
+
+    float3 lightNdc = lightNdc0;
+    lightNdc.xy /= (1u << clipmapIndex);
+
+    float3 virtualTextureUv = calculateVirtualTextureUv(lightNdc, g_ShadowConstants.viewProjection, clipmapIndex);
     uint2 virtualTextureCoordinates = CASCADE_RESOLUTION * virtualTextureUv.xy;
     uint2 pageTableCoordinates = virtualTextureCoordinates / PAGE_RESOLUTION_UINT;
     uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
 
-    uint virtualPageData = g_VirtualPageTable[pageTableCoordinates];
+    uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, clipmapIndex)];
     if (isValid(virtualPageData))
     {
         uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);

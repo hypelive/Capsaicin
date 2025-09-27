@@ -14,9 +14,9 @@ ShadowStructures::~ShadowStructures() noexcept
 
 bool ShadowStructures::init([[maybe_unused]] CapsaicinInternal const& capsaicin) noexcept
 {
-    m_virtualPageTable = gfxCreateTexture2D(gfx_, PAGE_TABLE_RESOLUTION_UINT,
-        PAGE_TABLE_RESOLUTION_UINT, DXGI_FORMAT_R32_UINT);
-    m_physicalPages = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
+    m_virtualPageTable = gfxCreateTexture2DArray(gfx_, PAGE_TABLE_RESOLUTION_UINT,
+        PAGE_TABLE_RESOLUTION_UINT, CASCADES_NUM_UINT, DXGI_FORMAT_R32_UINT);
+    m_physicalPages = gfxCreateTexture2D(gfx_, PHYSICAL_TEXTURE_RESOLUTION, PHYSICAL_TEXTURE_RESOLUTION,
         DXGI_FORMAT_R32_UINT);
 
     m_vptClearProgram = capsaicin.createProgram("components/shadow_structures/clear_virtual_pages");
@@ -50,7 +50,7 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
     const auto defaultLightView = glm::lookAt(glm::vec3{0.0f}, -directionalLightDirection,
         glm::vec3{0.0f, 0.0f, 1.0f});
     const auto defaultLightProjection = glm::ortho(-CASCADE_SIZE_0, CASCADE_SIZE_0, -CASCADE_SIZE_0,
-        CASCADE_SIZE_0, -40.0f, 40.0f);
+        CASCADE_SIZE_0, -50.0f, 50.0f);
 
     const auto defaultLightViewProjection = defaultLightProjection * defaultLightView;
 
@@ -109,10 +109,10 @@ void ShadowStructures::clearResources()
 
     gfxCommandBindKernel(gfx_, m_vptClearKernel);
     gfxCommandDispatch(gfx_, getGroupCount(m_virtualPageTable.getWidth(), numThreads.x),
-        getGroupCount(m_virtualPageTable.getHeight(), numThreads.y), 1);
+        getGroupCount(m_virtualPageTable.getHeight(), numThreads.y), CASCADES_NUM_UINT);
 
     gfxCommandBindKernel(gfx_, m_ppClearKernel);
     gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),
-        getGroupCount(m_physicalPages.getHeight(), numThreads.y), 1);
+        getGroupCount(m_physicalPages.getHeight(), numThreads.y), CASCADES_NUM_UINT);
 }
 } // namespace Capsaicin

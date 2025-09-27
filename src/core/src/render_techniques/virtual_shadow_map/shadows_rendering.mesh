@@ -10,6 +10,7 @@ StructuredBuffer<uint> g_MeshletPackBuffer;
 StructuredBuffer<Vertex> g_VertexBuffer;
 // We have multiple index data sets for the animations.
 uint g_VertexDataIndex;
+uint g_ClipmapIndex;
 
 #define NUM_TRIS 64
 #define NUM_VERTS 64
@@ -42,7 +43,7 @@ void main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload MeshPa
         float3 worldPosition = transformPoint(vertex.getPosition(), transform);
 
         VertexParams vertexParams;
-        vertexParams.screenPosition = mul(g_DrawConstants[0].viewProjection, float4(worldPosition, 1.0f));
+        vertexParams.screenPosition = float4(calculateLightNdc(worldPosition, g_DrawConstants[0].viewProjection, g_ClipmapIndex), 1.0f);
         vertexParams.uv = vertex.getUV();
         vertexParams.worldPosition = worldPosition;
 

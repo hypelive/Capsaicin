@@ -1,12 +1,12 @@
 #include "shadows/shared.h"
 #include "math/color.hlsl"
 
-RWTexture2D<uint> g_VirtualPageTableUav;
+RWTexture2DArray<uint> g_VirtualPageTableUav;
 
 [numthreads(16, 16, 1)]
-void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint3 did : SV_DispatchThreadID)
 {
-    if (any(did > PAGE_TABLE_RESOLUTION))
+    if (any(did.xy > PAGE_TABLE_RESOLUTION))
     {
         return;
     }

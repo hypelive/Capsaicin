@@ -2,12 +2,12 @@
 #include "math/color.hlsl"
 
 RWStructuredBuffer<AllocationsState> g_AllocationsState;
-RWTexture2D<uint> g_VirtualPageTableUav;
+RWTexture2DArray<uint> g_VirtualPageTableUav;
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
-void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint3 did : SV_DispatchThreadID)
 {
-    if (any(did > PAGE_TABLE_RESOLUTION))
+    if (any(did.xy > PAGE_TABLE_RESOLUTION))
     {
         return;
     }
@@ -18,6 +18,13 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
         uint physicalPageIndex;
         InterlockedAdd(g_AllocationsState[0].allocationIndex, 1, physicalPageIndex);
 
-        g_VirtualPageTableUav[did] = packVPTInfo(physicalPageIndex);
+        if (physicalPageIndex < PHYSICAL_PAGES_BUFFER_RESOLUTION * PHYSICAL_PAGES_BUFFER_RESOLUTION)
+        {
+            g_VirtualPageTableUav[did] = packVPTInfo(physicalPageIndex);
+        }
+        else
+        {
+            g_VirtualPageTableUav[did] = VPT_CLEAR_VALUE;
+        }
     }
 }

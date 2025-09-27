@@ -142,7 +142,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxCommandBindKernel(gfx_, m_allocatePhysicalPagesKernel);
         const glm::uvec2 groupCount = {ceil(PAGE_TABLE_RESOLUTION / TILE_SIZE),
                                        ceil(PAGE_TABLE_RESOLUTION / TILE_SIZE)};
-        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
+        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, CASCADES_NUM_UINT);
     }
 
     // Render shadow maps.
@@ -162,7 +162,6 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         const uint32_t drawDataSize = static_cast<uint32_t>(drawData.size());
         gfxDestroyBuffer(gfx_, m_drawDataBuffer);
         m_drawDataBuffer = gfxCreateBuffer<DrawData>(gfx_, drawDataSize, drawData.data());
-    
 
         // Filling the draw constants.
         RenderingConstants drawConstants = {};
@@ -171,7 +170,6 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
 
         gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);
         m_drawConstantsBuffer = gfxCreateBuffer<RenderingConstants>(gfx_, 1, &drawConstants);
-    
 
         // Set the root parameters.
         gfxProgramSetParameter(gfx_, m_renderingProgram, "g_DrawConstants", m_drawConstantsBuffer);
@@ -207,10 +205,15 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxCommandBindColorTarget(gfx_, 0, m_debugTexture);
         gfxCommandBindKernel(gfx_, m_renderingKernel);
 
-        uint32_t const* num_threads  = gfxKernelGetNumThreads(gfx_, m_renderingKernel);
-        uint32_t const  num_groups_x = (drawDataSize + num_threads[0] - 1) / num_threads[0];
+        for (uint32_t clipmapIndex = 0; clipmapIndex < CASCADES_NUM_UINT; ++clipmapIndex)
+        {
+            gfxProgramSetParameter(gfx_, m_renderingProgram, "g_ClipmapIndex", clipmapIndex);
 
-        gfxCommandDrawMesh(gfx_, num_groups_x, 1, 1);
+            uint32_t const* num_threads  = gfxKernelGetNumThreads(gfx_, m_renderingKernel);
+            uint32_t const  num_groups_x = (drawDataSize + num_threads[0] - 1) / num_threads[0];
+
+            gfxCommandDrawMesh(gfx_, num_groups_x, 1, 1);
+        }
 
         gfxCommandSetViewport(gfx_);
     }
