@@ -24,6 +24,8 @@ bool ShadowStructures::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_ppClearProgram  = capsaicin.createProgram("components/shadow_structures/clear_physical_pages");
     m_ppClearKernel   = gfxCreateComputeKernel(gfx_, m_ppClearProgram);
 
+    clearResources();
+
     return m_vptClearKernel && m_ppClearKernel;
 }
 

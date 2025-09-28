@@ -1,0 +1,17 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+#include "math/transform.hlsl"
+
+RWTexture2DArray<uint> g_VirtualPageTableUav;
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void main(uint3 did : SV_DispatchThreadID)
+{
+    if (any(did.xy > PAGE_TABLE_RESOLUTION_UINT))
+    {
+        return;
+    }
+
+    uint currentData = g_VirtualPageTableUav[did];
+    g_VirtualPageTableUav[did] = resetVisible(currentData);
+}

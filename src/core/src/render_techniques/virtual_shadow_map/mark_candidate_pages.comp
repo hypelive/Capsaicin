@@ -1,0 +1,14 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+#include "math/transform.hlsl"
+
+RWBuffer<uint> g_UnusedPages;
+RWBuffer<uint> g_InvalidPages;
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
+Texture2DArray<uint> g_VirtualPageTable;
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void main(uint3 did : SV_DispatchThreadID)
+{
+    // TODO
+}

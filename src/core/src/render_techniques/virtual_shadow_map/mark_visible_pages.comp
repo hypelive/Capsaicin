@@ -4,6 +4,8 @@
 
 ConstantBuffer<VSMConstants> g_Constants;
 Texture2D<float> g_DepthCopy;
+RWBuffer<uint> g_VisiblePages;
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
 RWTexture2DArray<uint> g_VirtualPageTableUav;
 // TODO remove
 RWTexture2D<float4> g_TargetTexture;
@@ -39,7 +41,17 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     float3 virtualTextureUv = calculateVirtualTextureUv(lightNdc, g_Constants.lightViewProjection, clipmapIndex);
     const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
 
-    g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = 1;
+    uint vptData = g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)];
+    if (isValid(vptData))
+    {
+        g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = setVisible(vptData);
+    }
+    else
+    {
+        uint pageDataIndex;
+        InterlockedAdd(g_AllocationsState[0].pendingVisibleCount, 1, pageDataIndex);
+        g_VisiblePages[pageDataIndex] = packPageData(pageCoordinates, clipmapIndex);
+    }
 
 #if 0
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);

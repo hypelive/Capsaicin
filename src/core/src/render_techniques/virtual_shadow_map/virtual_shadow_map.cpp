@@ -58,11 +58,26 @@ DebugViewList VirtualShadowMap::getDebugViews() const noexcept
 bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin) noexcept
 {
     m_allocationsState = gfxCreateBuffer<AllocationsState>(gfx_, 1);
-    m_debugTexture = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT, DXGI_FORMAT_R8G8B8A8_UNORM);
 
+    m_debugTexture = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
+        DXGI_FORMAT_R8G8B8A8_UNORM);
+
+    constexpr uint32_t MAX_PAGES = PAGE_TABLE_RESOLUTION_UINT * PAGE_TABLE_RESOLUTION_UINT *
+                                   CASCADES_NUM_UINT;
+    // We don't care about initial content of the buffers.
+    m_pendingVisiblePages = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
+    m_unusedPages         = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
+    m_invalidPages        = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
+
+    m_resetVisibleProgram = capsaicin.createProgram(
+        "render_techniques/virtual_shadow_map/reset_visible_status");
+    m_resetVisibleKernel      = gfxCreateComputeKernel(gfx_, m_resetVisibleProgram);
     m_markVisiblePagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/mark_visible_pages");
-    m_markVisiblePagesKernel       = gfxCreateComputeKernel(gfx_, m_markVisiblePagesProgram);
+    m_markVisiblePagesKernel = gfxCreateComputeKernel(gfx_, m_markVisiblePagesProgram);
+    m_markUnusedPagesProgram = capsaicin.createProgram(
+        "render_techniques/virtual_shadow_map/mark_candidate_pages");
+    m_markUnusedPagesKernel        = gfxCreateComputeKernel(gfx_, m_markUnusedPagesProgram);
     m_allocatePhysicalPagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/allocate_physical_pages");
     m_allocatePhysicalPagesKernel = gfxCreateComputeKernel(gfx_, m_allocatePhysicalPagesProgram);
@@ -73,28 +88,29 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     gfxDrawStateSetColorTarget(
         renderingDrawState, 0, m_debugTexture.getFormat());
 
-    m_renderingProgram            = capsaicin.createProgram(
+    m_renderingProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/shadows_rendering");
     m_renderingKernel = gfxCreateMeshKernel(gfx_, m_renderingProgram, renderingDrawState);
 
     m_debugProgram = capsaicin.createProgram("render_techniques/virtual_shadow_map/debug_draw");
     m_debugKernel  = gfxCreateComputeKernel(gfx_, m_debugProgram);
 
-    return m_markVisiblePagesKernel && m_allocatePhysicalPagesKernel && m_renderingKernel && m_debugKernel;
+    return m_markVisiblePagesKernel && m_markUnusedPagesKernel && m_allocatePhysicalPagesKernel &&
+           m_renderingKernel && m_debugKernel;
 }
 
 void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
 {
-    m_options                 = convertOptions(capsaicin.getOptions());
-    auto const& targetTexture = capsaicin.getSharedTexture("Debug");
+    m_options                    = convertOptions(capsaicin.getOptions());
+    auto const& targetTexture    = capsaicin.getSharedTexture("Debug");
     const auto& shadowStructures = capsaicin.getComponent<ShadowStructures>();
 
     const glm::vec2   renderResolution    = {targetTexture.getWidth(), targetTexture.getHeight()};
     const glm::mat4x4 lightViewProjection = shadowStructures->m_lightViewProjection;
     auto const&       gpuDrawConstants    = capsaicin.allocateConstantBuffer<VSMConstants>(1);
     {
-        const auto& cameraMatrices            = capsaicin.getCameraMatrices();
-        const auto& camera                    = capsaicin.getCamera();
+        const auto& cameraMatrices = capsaicin.getCameraMatrices();
+        const auto& camera         = capsaicin.getCamera();
 
         VSMConstants drawConstants        = {};
         drawConstants.viewProjection      = cameraMatrices.view_projection;
@@ -110,10 +126,20 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxBufferGetData<VSMConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
 
-    // Clear
+    // Clear. TODO maybe share between frames?
     {
         gfxCommandClearBuffer(gfx_, m_allocationsState);
-        shadowStructures->clearResources();
+    }
+
+    // Reset visible status.
+    {
+        gfxProgramSetParameter(gfx_, m_resetVisibleProgram, "g_VirtualPageTableUav",
+            shadowStructures->getVirtualPageTable());
+
+        gfxCommandBindKernel(gfx_, m_resetVisibleKernel);
+        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + PAGE_TABLE_RESOLUTION_UINT - 1) /
+                                    PAGE_TABLE_RESOLUTION_UINT;
+        gfxCommandDispatch(gfx_, groupCount, groupCount, CASCADES_NUM_UINT);
     }
 
     // Form new allocation requests.
@@ -121,7 +147,11 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_Constants", gpuDrawConstants);
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_DepthCopy",
             capsaicin.getSharedTexture("DepthCopy"));
-        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VirtualPageTableUav", shadowStructures->getVirtualPageTable());
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VirtualPageTableUav",
+            shadowStructures->getVirtualPageTable());
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VisiblePages", m_pendingVisiblePages);
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_AllocationsState",
+            m_allocationsState);
         // TODO remove debug
         gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_TargetTexture", targetTexture);
 
@@ -132,7 +162,12 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 
-    // Allocate required pages.
+    // Add unused and invalid pages to the queues.
+    {
+        // TODO
+    }
+
+    // Allocate required pages. TODO use queues
     {
         gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_AllocationsState",
             m_allocationsState);

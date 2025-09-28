@@ -33,20 +33,61 @@ ConstantBuffer<ShadowConstants> g_ShadowConstants;
 Texture2DArray<uint> g_VirtualPageTable;
 Texture2D<uint> g_PhysicalPages;
 
+struct VPTData 
+{
+    uint2 physicalCoordinates;
+    uint frameCounter;
+    uint isVisible;
+    uint isValid;
+};
+
 bool isValid(uint data)
 {
-    return data != VPT_CLEAR_VALUE;
+    return data >> 31;
 }
 
-// Zero is invalid, so real pages start from one.
-uint packVPTInfo(uint physicalPageIndex)
+bool isValid(VPTData data)
 {
-    return ((physicalPageIndex % PHYSICAL_PAGES_BUFFER_RESOLUTION) << 16) | ((physicalPageIndex / PHYSICAL_PAGES_BUFFER_RESOLUTION) & 0xFFFF);
+    return data.isValid;
 }
 
-uint2 unpackVPTInfo(uint packed)
+bool isVisible(uint data)
 {
-    return uint2(packed >> 16, packed & 0xFFFF);
+    return (data >> 30) & 0x1;
+}
+
+uint setVisible(uint data)
+{
+    // Set visible bit and reset frame counter.
+    return data | (0x1 << 30) | (0xF << 26);
+}
+
+uint resetVisible(uint data)
+{
+    VPTData unpackedData = unpackVPTData(data);
+    if (unpackedData.frameCounter > 0)
+    {
+        unpackedData.frameCounter -= 1;
+    }
+    unpackedData.isVisible = 0;
+    return packVPTData(unpackedData);
+}
+
+// 1 valid 1 visible 4 frameCounter 2 reserved 12 physical y 12 physical x
+uint packVPTData(VPTData data)
+{
+    return ((data.isValid & 0x1) << 31) | ((data.isVisible & 0x1) << 30) | ((data.frameCounter & 0xF) << 26) | ((data.physicalCoordinates.y & 0xFFF) << 12) | (data.physicalCoordinates.x & 0xFFF);
+}
+
+VPTData unpackVPTData(uint packed)
+{
+    VPTData result;
+    result.isValid = isValid(packed);
+    result.isVisible = isVisible(packed);
+    result.frameCounter = (packed >> 26) & 0xF;
+    result.physicalCoordinates = uint2(packed & 0xFFF, (packed >> 12) & 0xFFF)
+
+    return result;
 }
 
 float3 calculateLightNdc(float3 worldPosition, float4x4 lightViewProjection, uint clipmapIndex)

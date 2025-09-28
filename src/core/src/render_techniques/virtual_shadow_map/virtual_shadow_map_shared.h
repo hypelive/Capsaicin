@@ -28,6 +28,27 @@ struct MeshPayload
     uint instanceIndex[MESH_GROUP_SIZE];
 };
 
+struct PageData 
+{
+    uint2 coordinates;
+    uint clipmapIndex;
+};
+
+// 8 clipmap 12 y 12 x
+uint packPageData(uint2 coordinates, uint clipmapIndex)
+{
+    return (clipmapIndex << 24) | ((coordinates.y & 0xFFF) << 12) | (coordinates.x & 0xFFF);
+}
+
+PageData unpackPageData(uint packed)
+{
+    PageData result;
+    result.coordinates = uint2(packed & 0xFFF, (packed >> 12) & 0xFFF);
+    result.clipmapIndex = packed >> 24;
+
+    return result;
+}
+
 #endif
 
 struct VSMConstants
@@ -43,8 +64,15 @@ struct VSMConstants
 
 struct AllocationsState
 {
-    // From 0 to PAGE_TABLE_RESOLUTION * PAGE_TABLE_RESOLUTION - 1.
-    uint allocationIndex;
+    // Ring buffers.
+    uint pendingVisibleCount;
+    uint pendingVisibleHead;
+
+    uint unusedCount;
+    uint unusedHead;
+    
+    uint invalidCount;
+    uint invalidHead;
 };
 
 struct RenderingConstants
