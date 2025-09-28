@@ -42,16 +42,13 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
 
     uint vptData = g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)];
-    if (isValid(vptData))
-    {
-        g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = setVisible(vptData);
-    }
-    else
+    if (!isVisible(vptData))
     {
         uint pageDataIndex;
         InterlockedAdd(g_AllocationsState[0].pendingVisibleCount, 1, pageDataIndex);
         g_VisiblePages[pageDataIndex] = packPageData(pageCoordinates, clipmapIndex);
     }
+    g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = setVisible(vptData);
 
 #if 0
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);

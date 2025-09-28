@@ -1,30 +1,52 @@
 #include "virtual_shadow_map_shared.h"
 #include "math/color.hlsl"
 
-RWStructuredBuffer<AllocationsState> g_AllocationsState;
+StructuredBuffer<AllocationsState> g_AllocationsState;
+Buffer<uint> g_UnusedPages;
+Buffer<uint> g_InvalidPages;
+Buffer<uint> g_VisiblePages;
+RWStructuredBuffer<PhysicalPagesStatistics> g_PhysicalPagesStatistics;
 RWTexture2DArray<uint> g_VirtualPageTableUav;
 
-[numthreads(TILE_SIZE, TILE_SIZE, 1)]
-void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint3 did : SV_DispatchThreadID)
+[numthreads(TILE_SIZE_SQR, 1, 1)]
+void main(uint did : SV_DispatchThreadID)
 {
-    if (any(did.xy > PAGE_TABLE_RESOLUTION))
+    if (did >= g_AllocationsState[0].pendingVisibleCount)
     {
         return;
     }
 
-    uint isVisible = g_VirtualPageTableUav[did];
-    if (isValid(isVisible))
+    uint3 pageData = unpackPageData(g_VisiblePages[did]);
+
+    VPTData newVptData;
+    newVptData.frameCounter = 0xF;
+    newVptData.isVisible = 1;
+    newVptData.isValid = 0;
+    newVptData.physicalCoordinates = uint2(0xFFFFFFFF, 0xFFFFFFFF);
+    if (did < g_AllocationsState[0].invalidCount)
+    {
+        uint3 candidate = unpackPageData(g_InvalidPages[did]);
+        VPTData candidateVptData = unpackVPTData(g_VirtualPageTableUav[candidate]);
+
+        newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
+    }
+    else if (did < g_AllocationsState[0].invalidCount + g_AllocationsState[0].unusedCount)
+    {
+        uint3 candidate = unpackPageData(g_UnusedPages[did - g_AllocationsState[0].invalidCount]);
+        VPTData candidateVptData = unpackVPTData(g_VirtualPageTableUav[candidate]);
+
+        newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
+    }
+    else if (g_PhysicalPagesStatistics[0].numPagesAllocated < PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR)
     {
         uint physicalPageIndex;
-        InterlockedAdd(g_AllocationsState[0].allocationIndex, 1, physicalPageIndex);
+        InterlockedAdd(g_PhysicalPagesStatistics[0].numPagesAllocated, 1, physicalPageIndex);
 
-        if (physicalPageIndex < PHYSICAL_PAGES_BUFFER_RESOLUTION * PHYSICAL_PAGES_BUFFER_RESOLUTION)
+        if (physicalPageIndex < PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR)
         {
-            g_VirtualPageTableUav[did] = packVPTInfo(physicalPageIndex);
-        }
-        else
-        {
-            g_VirtualPageTableUav[did] = VPT_CLEAR_VALUE;
+            newVptData.physicalCoordinates = uint2(physicalPageIndex % PHYSICAL_PAGES_BUFFER_RESOLUTION, physicalPageIndex / PHYSICAL_PAGES_BUFFER_RESOLUTION);
         }
     }
+
+    g_VirtualPageTableUav[pageData] = packVptData(newVptData);
 }

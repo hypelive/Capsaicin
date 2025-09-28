@@ -5,10 +5,32 @@
 RWBuffer<uint> g_UnusedPages;
 RWBuffer<uint> g_InvalidPages;
 RWStructuredBuffer<AllocationsState> g_AllocationsState;
-Texture2DArray<uint> g_VirtualPageTable;
 
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint3 did : SV_DispatchThreadID)
 {
-    // TODO
+    if (any(did.xy > PAGE_TABLE_RESOLUTION_UINT))
+    {
+        return;
+    }
+
+    uint packedVptData = g_VirtualPageTable[did];
+    if (!isBacked(packedVptData))
+    {
+        return;
+    }
+
+    VPTData vptData = unpackVPTData(packedVptData);
+    if (!vptData.isValid && !vptData.isVisible)
+    {
+        uint pageDataIndex;
+        InterlockedAdd(g_AllocationsState[0].invalidCount, 1, pageDataIndex);
+        g_InvalidPages[pageDataIndex] = packPageData(did);
+    }
+    else if (vptData.frameCounter == 0)
+    {
+        uint pageDataIndex;
+        InterlockedAdd(g_AllocationsState[0].unusedCount, 1, pageDataIndex);
+        g_UnusedPages[pageDataIndex] = packPageData(did);
+    }
 }

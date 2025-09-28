@@ -19,12 +19,13 @@ static const float PAGE_NDC = 2.0f * PAGE_UV;
 static const float CASCADE_SIZE_0 = 2.0f;
 static const float CASCADES_NUM = 8.0f;
 static const uint CASCADES_NUM_UINT = (uint)CASCADES_NUM;
-static const uint VPT_CLEAR_VALUE = 0xFFFFFFFFu;
+static const uint VPT_CLEAR_VALUE = 0x00FFFFFFu;
 static const float PP_CLEAR_VALUE = 1024.0f * 1024.0f;
 
 // TODO remove this variable, allocate dynamically
 static const uint PHYSICAL_TEXTURE_RESOLUTION = CASCADE_RESOLUTION_UINT << 1u;
 static const uint PHYSICAL_PAGES_BUFFER_RESOLUTION = PHYSICAL_TEXTURE_RESOLUTION / PAGE_RESOLUTION_UINT;
+static const uint PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR = PHYSICAL_PAGES_BUFFER_RESOLUTION * PHYSICAL_PAGES_BUFFER_RESOLUTION;
 
 #ifndef __cplusplus
 
@@ -40,6 +41,11 @@ struct VPTData
     uint isVisible;
     uint isValid;
 };
+
+bool isBacked(uint data)
+{
+    return (data & 0xFFFFFF) == 0xFFFFFF;
+}
 
 bool isValid(uint data)
 {
@@ -145,7 +151,7 @@ float sampleShadowFactor(float3 worldPosition)
     uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, clipmapIndex)];
     if (isValid(virtualPageData))
     {
-        uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
+        uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData).physicalCoordinates;
         float shadowMapDepth = asfloat(g_PhysicalPages.Load(int3(PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage, 0)));
         if (virtualTextureUv.z > shadowMapDepth)
         {

@@ -49,17 +49,16 @@ float4 main(in VertexParams params, in PrimParams primitiveParams) : SV_Target0
     uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
 
     uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, g_ClipmapIndex)];
-    if (!isValid(virtualPageData))
+    if (!isVisible(virtualPageData) || isValid(virtualPageData) || !isBacked(virtualPageData))
     {
-        // Page isn't visible.
         return float4(0, 0, 0, 0);
     }
 
-    uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData);
+    uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData).physicalCoordinates;
     uint oldValue;
     // TODO add slope bias
     const float BIAS = 1e-3f;
     InterlockedMin(g_PhysicalPagesUav[PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage], asuint(params.screenPosition.z + BIAS), oldValue);
 
-    return float4(params.screenPosition.zzz,1);
+    return float4(params.screenPosition.zzz, 1);
 }

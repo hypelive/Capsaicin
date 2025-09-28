@@ -58,6 +58,8 @@ DebugViewList VirtualShadowMap::getDebugViews() const noexcept
 bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin) noexcept
 {
     m_allocationsState = gfxCreateBuffer<AllocationsState>(gfx_, 1);
+    m_pagesStatistics  = gfxCreateBuffer<PhysicalPagesStatistics>(gfx_, 1);
+    gfxCommandClearBuffer(gfx_, m_pagesStatistics);
 
     m_debugTexture = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
         DXGI_FORMAT_R8G8B8A8_UNORM);
@@ -78,6 +80,9 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_markUnusedPagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/mark_candidate_pages");
     m_markUnusedPagesKernel        = gfxCreateComputeKernel(gfx_, m_markUnusedPagesProgram);
+    m_setDispatchParametersProgram = capsaicin.createProgram(
+        "render_techniques/virtual_shadow_map/set_dispatch_parameters");
+    m_setDispatchParametersKernel  = gfxCreateComputeKernel(gfx_, m_setDispatchParametersProgram);
     m_allocatePhysicalPagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/allocate_physical_pages");
     m_allocatePhysicalPagesKernel = gfxCreateComputeKernel(gfx_, m_allocatePhysicalPagesProgram);
@@ -95,8 +100,8 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_debugProgram = capsaicin.createProgram("render_techniques/virtual_shadow_map/debug_draw");
     m_debugKernel  = gfxCreateComputeKernel(gfx_, m_debugProgram);
 
-    return m_markVisiblePagesKernel && m_markUnusedPagesKernel && m_allocatePhysicalPagesKernel &&
-           m_renderingKernel && m_debugKernel;
+    return m_markVisiblePagesKernel && m_markUnusedPagesKernel && m_setDispatchParametersKernel &&
+           m_allocatePhysicalPagesKernel && m_renderingKernel && m_debugKernel;
 }
 
 void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
@@ -164,20 +169,41 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
 
     // Add unused and invalid pages to the queues.
     {
-        // TODO
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_AllocationsState", m_allocationsState);
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_InvalidPages", m_invalidPages);
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_UnusedPages", m_unusedPages);
+
+        gfxCommandBindKernel(gfx_, m_markUnusedPagesKernel);
+        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + PAGE_TABLE_RESOLUTION_UINT - 1) /
+                                    PAGE_TABLE_RESOLUTION_UINT;
+        gfxCommandDispatch(gfx_, groupCount, groupCount, CASCADES_NUM_UINT);
     }
 
-    // Allocate required pages. TODO use queues
+    // Prepare Indirect dispatch buffer.
+    {
+        gfxProgramSetParameter(gfx_, m_setDispatchParametersProgram, "g_DispatchCommandBuffer",
+            m_dispatchIndirectBuffer);
+        gfxProgramSetParameter(gfx_, m_setDispatchParametersProgram, "g_AllocationsState",
+            m_allocationsState);
+
+        gfxCommandBindKernel(gfx_, m_setDispatchParametersKernel);
+        gfxCommandDispatch(gfx_, 1, 1, 1);
+    }
+
+    // Allocate required pages.
     {
         gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_AllocationsState",
             m_allocationsState);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_PhysicalPagesStatistics",
+            m_pagesStatistics);
         gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_VirtualPageTableUav",
             shadowStructures->getVirtualPageTable());
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_InvalidPages", m_invalidPages);
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_UnusedPages", m_unusedPages);
+        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VisiblePages", m_pendingVisiblePages);
 
         gfxCommandBindKernel(gfx_, m_allocatePhysicalPagesKernel);
-        const glm::uvec2 groupCount = {ceil(PAGE_TABLE_RESOLUTION / TILE_SIZE),
-                                       ceil(PAGE_TABLE_RESOLUTION / TILE_SIZE)};
-        gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, CASCADES_NUM_UINT);
+        gfxCommandDispatchIndirect(gfx_, m_dispatchIndirectBuffer);
     }
 
     // Render shadow maps.

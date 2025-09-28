@@ -84,12 +84,14 @@ private:
     RenderOptions m_options;
 
     GfxBuffer  m_allocationsState;
+    GfxBuffer  m_pagesStatistics;
     GfxBuffer  m_drawDataBuffer;
     GfxBuffer  m_drawConstantsBuffer;
     // Ring buffers.
     GfxBuffer  m_pendingVisiblePages;
     GfxBuffer  m_unusedPages;
     GfxBuffer  m_invalidPages;
+    GfxBuffer  m_dispatchIndirectBuffer;
 
     GfxProgram m_resetVisibleProgram;
     GfxKernel  m_resetVisibleKernel;
@@ -97,6 +99,8 @@ private:
     GfxKernel  m_markVisiblePagesKernel;
     GfxProgram m_markUnusedPagesProgram;
     GfxKernel  m_markUnusedPagesKernel;
+    GfxProgram m_setDispatchParametersProgram;
+    GfxKernel  m_setDispatchParametersKernel;
     GfxProgram m_allocatePhysicalPagesProgram;
     GfxKernel  m_allocatePhysicalPagesKernel;
     GfxProgram m_renderingProgram;

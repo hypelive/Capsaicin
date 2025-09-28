@@ -1,0 +1,17 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+#include "math/transform.hlsl"
+
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
+RWStructuredBuffer<DispatchCommand> g_DispatchCommandBuffer;
+
+[numthreads(1, 1, 1)]
+void main()
+{
+    DispatchCommand dispatch_command;
+    dispatch_command.num_groups_x = (g_AllocationsState[0].pendingVisibleCount + TILE_SIZE_SQR - 1) / TILE_SIZE_SQR;
+    dispatch_command.num_groups_y = 1;
+    dispatch_command.num_groups_z = 1;
+    dispatch_command.padding = 0;
+    g_DispatchCommandBuffer[0] = dispatch_command;
+}

@@ -28,25 +28,21 @@ struct MeshPayload
     uint instanceIndex[MESH_GROUP_SIZE];
 };
 
-struct PageData 
-{
-    uint2 coordinates;
-    uint clipmapIndex;
-};
-
 // 8 clipmap 12 y 12 x
 uint packPageData(uint2 coordinates, uint clipmapIndex)
 {
     return (clipmapIndex << 24) | ((coordinates.y & 0xFFF) << 12) | (coordinates.x & 0xFFF);
 }
 
-PageData unpackPageData(uint packed)
+// 8 clipmap 12 y 12 x
+uint packPageData(uint3 coordinates)
 {
-    PageData result;
-    result.coordinates = uint2(packed & 0xFFF, (packed >> 12) & 0xFFF);
-    result.clipmapIndex = packed >> 24;
+    return (coordinates.z << 24) | ((coordinates.y & 0xFFF) << 12) | (coordinates.x & 0xFFF);
+}
 
-    return result;
+uint3 unpackPageData(uint packed)
+{
+    return uint3(packed & 0xFFF, (packed >> 12) & 0xFFF, packed >> 24);
 }
 
 #endif
@@ -74,6 +70,11 @@ struct AllocationsState
     uint invalidCount;
     uint invalidHead;
 };
+
+struct PhysicalPagesStatistics
+{
+    uint numPagesAllocated;
+}
 
 struct RenderingConstants
 {
