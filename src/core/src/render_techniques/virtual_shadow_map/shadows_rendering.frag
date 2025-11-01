@@ -49,12 +49,12 @@ float4 main(in VertexParams params, in PrimParams primitiveParams) : SV_Target0
     uint2 textureCoordinatesInsidePage = virtualTextureCoordinates % PAGE_RESOLUTION_UINT;
 
     uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, g_ClipmapIndex)];
-    if (!isVisible(virtualPageData) || isValid(virtualPageData) || !isBacked(virtualPageData))
+    if (!isVisible(virtualPageData) || !isBacked(virtualPageData))
     {
         return float4(0, 0, 0, 0);
     }
 
-    uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData).physicalCoordinates;
+    uint2 physicalTextureCoordinates = unpackVPTData(virtualPageData).physicalCoordinates;
     uint oldValue;
     // TODO add slope bias
     const float BIAS = 1e-3f;

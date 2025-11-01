@@ -2,14 +2,21 @@
 #include "math/color.hlsl"
 #include "math/transform.hlsl"
 
-RWStructuredBuffer<AllocationsState> g_AllocationsState;
+StructuredBuffer<AllocationsState> g_AllocationsState;
 RWStructuredBuffer<DispatchCommand> g_DispatchCommandBuffer;
 
 [numthreads(1, 1, 1)]
 void main()
 {
+#ifdef ALLOCATE_PAGES
+    const uint numThreadsRequired = g_AllocationsState[0].pendingVisibleCount;
+#else // CLEAR_PAGES
+    // NOTE: Each thread clears 4 pixels.
+    const uint numThreadsRequired = g_AllocationsState[0].pagesToClearCount * PAGE_RESOLUTION_UINT * PAGE_RESOLUTION_UINT / 4;
+#endif
+
     DispatchCommand dispatch_command;
-    dispatch_command.num_groups_x = (g_AllocationsState[0].pendingVisibleCount + TILE_SIZE_SQR - 1) / TILE_SIZE_SQR;
+    dispatch_command.num_groups_x = (numThreadsRequired + TILE_SIZE_SQR - 1) / TILE_SIZE_SQR;
     dispatch_command.num_groups_y = 1;
     dispatch_command.num_groups_z = 1;
     dispatch_command.padding = 0;

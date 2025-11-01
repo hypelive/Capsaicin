@@ -1,10 +1,11 @@
 #include "virtual_shadow_map_shared.h"
 #include "math/color.hlsl"
 
-StructuredBuffer<AllocationsState> g_AllocationsState;
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
 Buffer<uint> g_UnusedPages;
 Buffer<uint> g_InvalidPages;
 Buffer<uint> g_VisiblePages;
+RWBuffer<uint> g_PagesToClear;
 RWStructuredBuffer<PhysicalPagesStatistics> g_PhysicalPagesStatistics;
 RWTexture2DArray<uint> g_VirtualPageTableUav;
 
@@ -28,14 +29,28 @@ void main(uint did : SV_DispatchThreadID)
         uint3 candidate = unpackPageData(g_InvalidPages[did]);
         VPTData candidateVptData = unpackVPTData(g_VirtualPageTableUav[candidate]);
 
+        newVptData.isValid = 1;
         newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
+
+        // NOTE: The page should be cleared.
+         g_VirtualPageTableUav[candidate] = VPT_CLEAR_VALUE;
+        uint pageDataIndex;
+        InterlockedAdd(g_AllocationsState[0].pagesToClearCount, 1, pageDataIndex);
+        g_PagesToClear[pageDataIndex] = packPageData(newVptData.physicalCoordinates, 0);
     }
     else if (did < g_AllocationsState[0].invalidCount + g_AllocationsState[0].unusedCount)
     {
         uint3 candidate = unpackPageData(g_UnusedPages[did - g_AllocationsState[0].invalidCount]);
         VPTData candidateVptData = unpackVPTData(g_VirtualPageTableUav[candidate]);
 
+        newVptData.isValid = 1;
         newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
+
+        // NOTE: The page should be cleared.
+        g_VirtualPageTableUav[candidate] = VPT_CLEAR_VALUE;
+        uint pageDataIndex;
+        InterlockedAdd(g_AllocationsState[0].pagesToClearCount, 1, pageDataIndex);
+        g_PagesToClear[pageDataIndex] = packPageData(newVptData.physicalCoordinates, 0);
     }
     else if (g_PhysicalPagesStatistics[0].numPagesAllocated < PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR)
     {
@@ -44,9 +59,14 @@ void main(uint did : SV_DispatchThreadID)
 
         if (physicalPageIndex < PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR)
         {
+            newVptData.isValid = 1;
             newVptData.physicalCoordinates = uint2(physicalPageIndex % PHYSICAL_PAGES_BUFFER_RESOLUTION, physicalPageIndex / PHYSICAL_PAGES_BUFFER_RESOLUTION);
+
+            // NOTE: We don't need to clear the page in this case, because we clear the pages on the texture creation.
         }
     }
 
-    g_VirtualPageTableUav[pageData] = packVptData(newVptData);
+    // NOTE: Note that we set valid flag here, so we guarantee that the page will be rendered this frame.
+    // In case of adding a rendering budget we should set valid flag only in case of rendering.
+    g_VirtualPageTableUav[pageData] = packVPTData(newVptData);
 }

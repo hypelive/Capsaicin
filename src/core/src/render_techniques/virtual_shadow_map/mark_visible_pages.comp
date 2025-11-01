@@ -41,16 +41,17 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     float3 virtualTextureUv = calculateVirtualTextureUv(lightNdc, g_Constants.lightViewProjection, clipmapIndex);
     const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
 
-    uint vptData = g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)];
-    if (!isVisible(vptData))
+    uint vptData;
+    InterlockedOr(g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)], FRAME_COUNTER_MASK | VISIBLE_BIT_MASK, vptData);
+    if (!isVisible(vptData) && !isBacked(vptData))
     {
         uint pageDataIndex;
         InterlockedAdd(g_AllocationsState[0].pendingVisibleCount, 1, pageDataIndex);
         g_VisiblePages[pageDataIndex] = packPageData(pageCoordinates, clipmapIndex);
     }
-    g_VirtualPageTableUav[uint3(pageCoordinates, clipmapIndex)] = setVisible(vptData);
 
-#if 0
+// Debug modes
+#if 0 
     g_TargetTexture[pixelCoordinates] = float4(frac(virtualTextureUv * PAGE_TABLE_RESOLUTION).xy, virtualTextureUv.z, 1);
 #else
 

@@ -60,6 +60,7 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_allocationsState = gfxCreateBuffer<AllocationsState>(gfx_, 1);
     m_pagesStatistics  = gfxCreateBuffer<PhysicalPagesStatistics>(gfx_, 1);
     gfxCommandClearBuffer(gfx_, m_pagesStatistics);
+    m_dispatchIndirectBuffer = gfxCreateBuffer<DispatchCommand>(gfx_, 1);
 
     m_debugTexture = gfxCreateTexture2D(gfx_, CASCADE_RESOLUTION_UINT, CASCADE_RESOLUTION_UINT,
         DXGI_FORMAT_R8G8B8A8_UNORM);
@@ -70,6 +71,7 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_pendingVisiblePages = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
     m_unusedPages         = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
     m_invalidPages        = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
+    m_pagesToClear        = gfxCreateBuffer<uint32_t>(gfx_, MAX_PAGES);
 
     m_resetVisibleProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/reset_visible_status");
@@ -79,10 +81,23 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_markVisiblePagesKernel = gfxCreateComputeKernel(gfx_, m_markVisiblePagesProgram);
     m_markUnusedPagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/mark_candidate_pages");
-    m_markUnusedPagesKernel        = gfxCreateComputeKernel(gfx_, m_markUnusedPagesProgram);
+    m_markUnusedPagesKernel = gfxCreateComputeKernel(gfx_, m_markUnusedPagesProgram);
+
     m_setDispatchParametersProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/set_dispatch_parameters");
-    m_setDispatchParametersKernel  = gfxCreateComputeKernel(gfx_, m_setDispatchParametersProgram);
+    const char* SET_DISPATCH_PARAMETERS_DEFINES[2] = {
+        "ALLOCATE_PAGES",
+        "CLEAR_PAGES"
+    };
+    m_setDispatchParametersAllocateKernel = gfxCreateComputeKernel(gfx_, m_setDispatchParametersProgram,
+        nullptr, &SET_DISPATCH_PARAMETERS_DEFINES[0], 1);
+    m_setDispatchParametersClearKernel = gfxCreateComputeKernel(gfx_, m_setDispatchParametersProgram,
+        nullptr, &SET_DISPATCH_PARAMETERS_DEFINES[1], 1);
+
+    m_clearReusedPagesProgram = capsaicin.createProgram(
+        "render_techniques/virtual_shadow_map/clear_physical_pages");
+    m_clearReusedPagesKernel = gfxCreateComputeKernel(gfx_, m_clearReusedPagesProgram);
+
     m_allocatePhysicalPagesProgram = capsaicin.createProgram(
         "render_techniques/virtual_shadow_map/allocate_physical_pages");
     m_allocatePhysicalPagesKernel = gfxCreateComputeKernel(gfx_, m_allocatePhysicalPagesProgram);
@@ -100,8 +115,9 @@ bool VirtualShadowMap::init([[maybe_unused]] CapsaicinInternal const& capsaicin)
     m_debugProgram = capsaicin.createProgram("render_techniques/virtual_shadow_map/debug_draw");
     m_debugKernel  = gfxCreateComputeKernel(gfx_, m_debugProgram);
 
-    return m_markVisiblePagesKernel && m_markUnusedPagesKernel && m_setDispatchParametersKernel &&
-           m_allocatePhysicalPagesKernel && m_renderingKernel && m_debugKernel;
+    return m_markVisiblePagesKernel && m_markUnusedPagesKernel && m_setDispatchParametersAllocateKernel &&
+           m_setDispatchParametersClearKernel && m_clearReusedPagesKernel && m_allocatePhysicalPagesKernel &&
+           m_renderingKernel && m_debugKernel;
 }
 
 void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
@@ -142,8 +158,8 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
             shadowStructures->getVirtualPageTable());
 
         gfxCommandBindKernel(gfx_, m_resetVisibleKernel);
-        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + PAGE_TABLE_RESOLUTION_UINT - 1) /
-                                    PAGE_TABLE_RESOLUTION_UINT;
+        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + TILE_SIZE - 1) /
+                                    TILE_SIZE;
         gfxCommandDispatch(gfx_, groupCount, groupCount, CASCADES_NUM_UINT);
     }
 
@@ -169,13 +185,15 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
 
     // Add unused and invalid pages to the queues.
     {
+        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_VirtualPageTable",
+            shadowStructures->getVirtualPageTable());
         gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_AllocationsState", m_allocationsState);
         gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_InvalidPages", m_invalidPages);
         gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_UnusedPages", m_unusedPages);
 
         gfxCommandBindKernel(gfx_, m_markUnusedPagesKernel);
-        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + PAGE_TABLE_RESOLUTION_UINT - 1) /
-                                    PAGE_TABLE_RESOLUTION_UINT;
+        const uint32_t groupCount = (PAGE_TABLE_RESOLUTION_UINT + TILE_SIZE - 1) /
+                                    TILE_SIZE;
         gfxCommandDispatch(gfx_, groupCount, groupCount, CASCADES_NUM_UINT);
     }
 
@@ -186,7 +204,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
         gfxProgramSetParameter(gfx_, m_setDispatchParametersProgram, "g_AllocationsState",
             m_allocationsState);
 
-        gfxCommandBindKernel(gfx_, m_setDispatchParametersKernel);
+        gfxCommandBindKernel(gfx_, m_setDispatchParametersAllocateKernel);
         gfxCommandDispatch(gfx_, 1, 1, 1);
     }
 
@@ -198,12 +216,37 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
             m_pagesStatistics);
         gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_VirtualPageTableUav",
             shadowStructures->getVirtualPageTable());
-        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_InvalidPages", m_invalidPages);
-        gfxProgramSetParameter(gfx_, m_markUnusedPagesProgram, "g_UnusedPages", m_unusedPages);
-        gfxProgramSetParameter(gfx_, m_markVisiblePagesProgram, "g_VisiblePages", m_pendingVisiblePages);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_InvalidPages", m_invalidPages);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_UnusedPages", m_unusedPages);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_VisiblePages", m_pendingVisiblePages);
+        gfxProgramSetParameter(gfx_, m_allocatePhysicalPagesProgram, "g_PagesToClear", m_pagesToClear);
 
         gfxCommandBindKernel(gfx_, m_allocatePhysicalPagesKernel);
         gfxCommandDispatchIndirect(gfx_, m_dispatchIndirectBuffer);
+    }
+
+    // Clear reused pages.
+    {
+        /*gfxProgramSetParameter(gfx_, m_setDispatchParametersProgram, "g_DispatchCommandBuffer",
+            m_dispatchIndirectBuffer);
+        gfxProgramSetParameter(gfx_, m_setDispatchParametersProgram, "g_AllocationsState",
+            m_allocationsState);
+
+        gfxCommandBindKernel(gfx_, m_setDispatchParametersClearKernel);
+        gfxCommandDispatch(gfx_, 1, 1, 1);
+
+        gfxProgramSetParameter(gfx_, m_clearReusedPagesProgram, "g_DispatchCommandBuffer",
+            m_dispatchIndirectBuffer);
+        gfxProgramSetParameter(gfx_, m_clearReusedPagesProgram, "g_AllocationsState",
+            m_allocationsState);
+        gfxProgramSetParameter(gfx_, m_clearReusedPagesProgram, "g_PagesToClear", m_pagesToClear);
+        gfxProgramSetParameter(gfx_, m_clearReusedPagesProgram, "g_PhysicalPagesUav",
+            shadowStructures->getPhysicalPages());
+
+        gfxCommandBindKernel(gfx_, m_clearReusedPagesKernel);
+        gfxCommandDispatchIndirect(gfx_, m_dispatchIndirectBuffer);*/
+
+        shadowStructures->clearResourcesDebug();
     }
 
     // Render shadow maps.

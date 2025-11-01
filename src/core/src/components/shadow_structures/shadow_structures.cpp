@@ -117,4 +117,21 @@ void ShadowStructures::clearResources()
     gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),
         getGroupCount(m_physicalPages.getHeight(), numThreads.y), CASCADES_NUM_UINT);
 }
+
+void ShadowStructures::clearResourcesDebug()
+{
+    gfxProgramSetParameter(gfx_, m_vptClearProgram, "g_VirtualPageTableUav", m_virtualPageTable);
+    gfxProgramSetParameter(gfx_, m_ppClearProgram, "g_PhysicalPagesUav", m_physicalPages);
+
+    const uint32_t* numThreadsPtr = gfxKernelGetNumThreads(gfx_, m_vptClearKernel);
+    const glm::uvec3 numThreads = { numThreadsPtr[0], numThreadsPtr[1], numThreadsPtr[2] };
+
+    const auto getGroupCount = [](uint32_t workSize, uint32_t groupSize) -> uint32_t {
+        return (workSize + groupSize - 1) / groupSize;
+        };
+
+    gfxCommandBindKernel(gfx_, m_ppClearKernel);
+    gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),
+        getGroupCount(m_physicalPages.getHeight(), numThreads.y), CASCADES_NUM_UINT);
+}
 } // namespace Capsaicin

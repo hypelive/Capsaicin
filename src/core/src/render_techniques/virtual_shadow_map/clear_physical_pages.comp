@@ -1,0 +1,30 @@
+#include "virtual_shadow_map_shared.h"
+#include "shadows/shared.h"
+#include "math/color.hlsl"
+
+StructuredBuffer<AllocationsState> g_AllocationsState;
+Buffer<uint> g_PagesToClear;
+RWTexture2D<uint> g_PhysicalPagesUav;
+
+[numthreads(TILE_SIZE_SQR, 1, 1)]
+void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint did : SV_DispatchThreadID)
+{
+    uint currentPage = did / (PAGE_RESOLUTION_UINT * PAGE_RESOLUTION_UINT / 4u);
+    uint currentQuad = did % (PAGE_RESOLUTION_UINT * PAGE_RESOLUTION_UINT / 4u);
+    if (currentPage >= g_AllocationsState[0].pagesToClearCount)
+    {
+        return;
+    }
+
+    uint2 pageCoordinates = PAGE_RESOLUTION_UINT * unpackPageData(g_PagesToClear[currentPage]).xy;
+    uint2 quadCoordinates = 2u * uint2(currentQuad % (PAGE_RESOLUTION_UINT / 2u), currentQuad / (PAGE_RESOLUTION_UINT / 2u));
+    uint2 coordinates = pageCoordinates + quadCoordinates;
+    
+    // NOTE: Clear four pixels
+    // [00][10]
+    // [01][11]
+    g_PhysicalPagesUav[coordinates + uint2(0u, 0u)] = asuint(PP_CLEAR_VALUE);
+    g_PhysicalPagesUav[coordinates + uint2(1u, 0u)] = asuint(PP_CLEAR_VALUE);
+    g_PhysicalPagesUav[coordinates + uint2(0u, 1u)] = asuint(PP_CLEAR_VALUE);
+    g_PhysicalPagesUav[coordinates + uint2(1u, 1u)] = asuint(PP_CLEAR_VALUE);
+}

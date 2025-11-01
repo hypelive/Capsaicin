@@ -69,12 +69,15 @@ struct AllocationsState
     
     uint invalidCount;
     uint invalidHead;
+
+    uint pagesToClearCount;
+    uint padding;
 };
 
 struct PhysicalPagesStatistics
 {
     uint numPagesAllocated;
-}
+};
 
 struct RenderingConstants
 {

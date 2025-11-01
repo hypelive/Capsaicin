@@ -44,7 +44,7 @@ struct VPTData
 
 bool isBacked(uint data)
 {
-    return (data & 0xFFFFFF) == 0xFFFFFF;
+    return (data & 0xFFFFFF) != 0xFFFFFF;
 }
 
 bool isValid(uint data)
@@ -57,26 +57,12 @@ bool isValid(VPTData data)
     return data.isValid;
 }
 
+static const uint VISIBLE_BIT_MASK = 1u << 30u;
+static const uint FRAME_COUNTER_MASK = 0xFu << 26u;
+
 bool isVisible(uint data)
 {
-    return (data >> 30) & 0x1;
-}
-
-uint setVisible(uint data)
-{
-    // Set visible bit and reset frame counter.
-    return data | (0x1 << 30) | (0xF << 26);
-}
-
-uint resetVisible(uint data)
-{
-    VPTData unpackedData = unpackVPTData(data);
-    if (unpackedData.frameCounter > 0)
-    {
-        unpackedData.frameCounter -= 1;
-    }
-    unpackedData.isVisible = 0;
-    return packVPTData(unpackedData);
+    return data & VISIBLE_BIT_MASK;
 }
 
 // 1 valid 1 visible 4 frameCounter 2 reserved 12 physical y 12 physical x
@@ -91,9 +77,20 @@ VPTData unpackVPTData(uint packed)
     result.isValid = isValid(packed);
     result.isVisible = isVisible(packed);
     result.frameCounter = (packed >> 26) & 0xF;
-    result.physicalCoordinates = uint2(packed & 0xFFF, (packed >> 12) & 0xFFF)
+    result.physicalCoordinates = uint2(packed & 0xFFF, (packed >> 12) & 0xFFF);
 
     return result;
+}
+
+uint resetVisible(uint data)
+{
+    VPTData unpackedData = unpackVPTData(data);
+    if (unpackedData.frameCounter > 0)
+    {
+        unpackedData.frameCounter -= 1;
+    }
+    unpackedData.isVisible = 0;
+    return packVPTData(unpackedData);
 }
 
 float3 calculateLightNdc(float3 worldPosition, float4x4 lightViewProjection, uint clipmapIndex)
@@ -151,7 +148,7 @@ float sampleShadowFactor(float3 worldPosition)
     uint virtualPageData = g_VirtualPageTable[uint3(pageTableCoordinates, clipmapIndex)];
     if (isValid(virtualPageData))
     {
-        uint2 physicalTextureCoordinates = unpackVPTInfo(virtualPageData).physicalCoordinates;
+        uint2 physicalTextureCoordinates = unpackVPTData(virtualPageData).physicalCoordinates;
         float shadowMapDepth = asfloat(g_PhysicalPages.Load(int3(PAGE_RESOLUTION_UINT * physicalTextureCoordinates + textureCoordinatesInsidePage, 0)));
         if (virtualTextureUv.z > shadowMapDepth)
         {
