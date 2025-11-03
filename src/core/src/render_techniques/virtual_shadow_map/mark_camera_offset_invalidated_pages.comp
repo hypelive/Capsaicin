@@ -1,0 +1,40 @@
+#include "virtual_shadow_map_shared.h"
+#include "math/color.hlsl"
+#include "math/transform.hlsl"
+
+RWStructuredBuffer<AllocationsState> g_AllocationsState;
+RWBuffer<uint> g_PagesToClear;
+float2 g_CameraOffsetDelta;
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void main(int3 did : SV_DispatchThreadID)
+{
+    if (any(did.xy >= PAGE_TABLE_RESOLUTION_UINT))
+    {
+        return;
+    }
+
+    // TODO support cascades.
+    const float2 currentNDC = PAGE_NDC * (did.xy - (PAGE_TABLE_RESOLUTION / 2.0f)) + PAGE_NDC / 2.0f;
+    const uint prevClipmapIndex = calculateClipmapIndexUnbound(float3(currentNDC + g_CameraOffsetDelta, 0.0f));
+    if (prevClipmapIndex == 0)
+    {
+        return;
+    }    
+
+    // TODO support clipmap index;
+    float2 virtualTextureUv = calculateVirtualTextureUv(float3(currentNDC, 0.0f), g_ShadowConstants.viewProjection, 0).xy;
+    const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
+    // TODO support clipmap index;
+    uint packedVptData = g_VirtualPageTable[uint3(pageCoordinates, 0)];
+    if (!isBacked(packedVptData))
+    {
+        // Nothing to clear.
+        return;
+    }
+
+    VPTData vptData = unpackVPTData(packedVptData);
+    uint pageDataIndex;
+    InterlockedAdd(g_AllocationsState[0].pagesToClearCount, 1, pageDataIndex);
+    g_PagesToClear[pageDataIndex] = packPageData(vptData.physicalCoordinates, 0);
+}

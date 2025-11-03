@@ -96,6 +96,8 @@ private:
 
     GfxProgram m_resetVisibleProgram;
     GfxKernel  m_resetVisibleKernel;
+    GfxProgram m_markCameraOffsetInvalidatedPagesProgram;
+    GfxKernel  m_markCameraOffsetInvalidatedPagesKernel;
     GfxProgram m_markVisiblePagesProgram;
     GfxKernel  m_markVisiblePagesKernel;
     GfxProgram m_markUnusedPagesProgram;

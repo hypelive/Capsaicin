@@ -19,7 +19,7 @@ void main(uint2 gtid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_
     }
 
     VPTData unpackedData = unpackVPTData(virtualPageData);
-    float4 color = isValid(virtualPageData) ? float4(unpackedData.physicalCoordinates / 128.0f, 0, 1) : float4(0, 0, 0, 1);
+    float4 color = isValid(virtualPageData) ? float4(unpackedData.frameCounter.xxx / 16.0f, 1) : float4(0, 0, 0, 1);
 
     g_TargetTexture[g_Constants.viewport.xy + did] = color; 
 }

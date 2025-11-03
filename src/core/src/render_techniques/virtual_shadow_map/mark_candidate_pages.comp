@@ -9,7 +9,7 @@ RWStructuredBuffer<AllocationsState> g_AllocationsState;
 [numthreads(TILE_SIZE, TILE_SIZE, 1)]
 void main(uint3 did : SV_DispatchThreadID)
 {
-    if (any(did.xy > PAGE_TABLE_RESOLUTION_UINT))
+    if (any(did.xy >= PAGE_TABLE_RESOLUTION_UINT))
     {
         return;
     }

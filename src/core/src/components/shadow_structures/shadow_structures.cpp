@@ -62,7 +62,7 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
         glm::ceil(glm::vec2{cameraPositionNDC.x, cameraPositionNDC.y} / PAGE_NDC);
     const glm::vec2 alignedCameraPositionNDC        = cameraPageOffset * PAGE_NDC;
     const glm::vec4 alignedCameraPositionWorldSpace = glm::inverse(defaultLightViewProjection) * glm::vec4{
-                                                          alignedCameraPositionNDC, cameraPositionNDC.z,
+                                                          alignedCameraPositionNDC, 0.5f,
                                                           1.0f};
 
     const glm::vec3 shadowCameraWorldPosition =
@@ -80,6 +80,9 @@ void ShadowStructures::run(CapsaicinInternal& capsaicin) noexcept
     cpuShadowConstants.viewProjection  = m_lightViewProjection;
 
     gfxBufferGetData<ShadowConstants>(gfx_, m_shadowConstants)[0] = cpuShadowConstants;
+
+    m_currentFrameCameraOffset = alignedCameraPositionNDC - m_prevCameraPageOffset;
+    m_prevCameraPageOffset     = alignedCameraPositionNDC;
 }
 
 void ShadowStructures::terminate() noexcept
@@ -112,23 +115,6 @@ void ShadowStructures::clearResources()
     gfxCommandBindKernel(gfx_, m_vptClearKernel);
     gfxCommandDispatch(gfx_, getGroupCount(m_virtualPageTable.getWidth(), numThreads.x),
         getGroupCount(m_virtualPageTable.getHeight(), numThreads.y), CASCADES_NUM_UINT);
-
-    gfxCommandBindKernel(gfx_, m_ppClearKernel);
-    gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),
-        getGroupCount(m_physicalPages.getHeight(), numThreads.y), CASCADES_NUM_UINT);
-}
-
-void ShadowStructures::clearResourcesDebug()
-{
-    gfxProgramSetParameter(gfx_, m_vptClearProgram, "g_VirtualPageTableUav", m_virtualPageTable);
-    gfxProgramSetParameter(gfx_, m_ppClearProgram, "g_PhysicalPagesUav", m_physicalPages);
-
-    const uint32_t* numThreadsPtr = gfxKernelGetNumThreads(gfx_, m_vptClearKernel);
-    const glm::uvec3 numThreads = { numThreadsPtr[0], numThreadsPtr[1], numThreadsPtr[2] };
-
-    const auto getGroupCount = [](uint32_t workSize, uint32_t groupSize) -> uint32_t {
-        return (workSize + groupSize - 1) / groupSize;
-        };
 
     gfxCommandBindKernel(gfx_, m_ppClearKernel);
     gfxCommandDispatch(gfx_, getGroupCount(m_physicalPages.getWidth(), numThreads.x),

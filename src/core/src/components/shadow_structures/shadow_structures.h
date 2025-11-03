@@ -49,12 +49,14 @@ public:
 
     void addShadingParameters(CapsaicinInternal const& capsaicin, GfxProgram const& program) const noexcept;
     void clearResources();
-    void clearResourcesDebug();
 
     const GfxTexture& getVirtualPageTable() const { return m_virtualPageTable; }
     const GfxTexture& getPhysicalPages() const { return m_physicalPages; }
 
     glm::mat4x4 m_lightViewProjection;
+    // Offset in pages of 0 cascade.
+    glm::vec2 m_currentFrameCameraOffset;
+    glm::vec2 m_prevCameraPageOffset;
 
 private:
     GfxBuffer  m_shadowConstants;

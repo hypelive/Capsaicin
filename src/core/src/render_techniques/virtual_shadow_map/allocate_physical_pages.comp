@@ -32,7 +32,7 @@ void main(uint did : SV_DispatchThreadID)
         newVptData.isValid = 1;
         newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
 
-        // NOTE: The page should be cleared.
+        // The page should be cleared.
          g_VirtualPageTableUav[candidate] = VPT_CLEAR_VALUE;
         uint pageDataIndex;
         InterlockedAdd(g_AllocationsState[0].pagesToClearCount, 1, pageDataIndex);
@@ -46,7 +46,7 @@ void main(uint did : SV_DispatchThreadID)
         newVptData.isValid = 1;
         newVptData.physicalCoordinates = candidateVptData.physicalCoordinates;
 
-        // NOTE: The page should be cleared.
+        // The page should be cleared.
         g_VirtualPageTableUav[candidate] = VPT_CLEAR_VALUE;
         uint pageDataIndex;
         InterlockedAdd(g_AllocationsState[0].pagesToClearCount, 1, pageDataIndex);
@@ -62,11 +62,11 @@ void main(uint did : SV_DispatchThreadID)
             newVptData.isValid = 1;
             newVptData.physicalCoordinates = uint2(physicalPageIndex % PHYSICAL_PAGES_BUFFER_RESOLUTION, physicalPageIndex / PHYSICAL_PAGES_BUFFER_RESOLUTION);
 
-            // NOTE: We don't need to clear the page in this case, because we clear the pages on the texture creation.
+            // We don't need to clear the page in this case, because we clear the pages on the texture creation.
         }
     }
 
-    // NOTE: Note that we set valid flag here, so we guarantee that the page will be rendered this frame.
+    // Note that we set valid flag here, so we guarantee that the page will be rendered this frame.
     // In case of adding a rendering budget we should set valid flag only in case of rendering.
     g_VirtualPageTableUav[pageData] = packVPTData(newVptData);
 }
