@@ -8,7 +8,7 @@ struct ShadowConstants
     float4x4 viewProjection;
 };
 
-static const float CASCADE_RESOLUTION = 4.0f * 128.0f;
+static const float CASCADE_RESOLUTION = 64.0f * 128.0f;
 static const uint CASCADE_RESOLUTION_UINT = (uint)CASCADE_RESOLUTION;
 static const float PAGE_RESOLUTION = 128.0f;
 static const uint PAGE_RESOLUTION_UINT = (uint)PAGE_RESOLUTION;
@@ -17,13 +17,13 @@ static const uint PAGE_TABLE_RESOLUTION_UINT = (uint)PAGE_TABLE_RESOLUTION;
 static const float PAGE_UV = PAGE_RESOLUTION / CASCADE_RESOLUTION;
 static const float PAGE_NDC = 2.0f * PAGE_UV;
 static const float CASCADE_SIZE_0 = 2.0f;
-static const float CASCADES_NUM = 1.0f;
+static const float CASCADES_NUM = 8.0f;
 static const uint CASCADES_NUM_UINT = (uint)CASCADES_NUM;
 static const uint VPT_CLEAR_VALUE = 0x00FFFFFFu;
 static const float PP_CLEAR_VALUE = 1024.0f * 1024.0f;
 
 // TODO remove this variable, allocate dynamically
-static const uint PHYSICAL_TEXTURE_RESOLUTION = CASCADE_RESOLUTION_UINT;
+static const uint PHYSICAL_TEXTURE_RESOLUTION = CASCADE_RESOLUTION_UINT << 1u;
 static const uint PHYSICAL_PAGES_BUFFER_RESOLUTION = PHYSICAL_TEXTURE_RESOLUTION / PAGE_RESOLUTION_UINT;
 static const uint PHYSICAL_PAGES_BUFFER_RESOLUTION_SQR = PHYSICAL_PAGES_BUFFER_RESOLUTION * PHYSICAL_PAGES_BUFFER_RESOLUTION;
 

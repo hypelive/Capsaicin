@@ -14,7 +14,8 @@ void main(int3 did : SV_DispatchThreadID)
         return;
     }
 
-    // TODO support cascades.
+    // TODO This overclears a lot, need to account only page reuses, not subpages movements for 1+ cascades.
+    // BUG it's not clearing higher cascades as should, something with borders?
     const float2 currentNDC = PAGE_NDC * (did.xy - (PAGE_TABLE_RESOLUTION / 2.0f)) + PAGE_NDC / 2.0f;
     const uint prevClipmapIndex = calculateClipmapIndexUnbound(float3(currentNDC + g_CameraOffsetDelta, 0.0f));
     if (prevClipmapIndex == 0)
@@ -22,11 +23,9 @@ void main(int3 did : SV_DispatchThreadID)
         return;
     }    
 
-    // TODO support clipmap index;
-    float2 virtualTextureUv = calculateVirtualTextureUv(float3(currentNDC, 0.0f), g_ShadowConstants.viewProjection, 0).xy;
+    float2 virtualTextureUv = calculateVirtualTextureUv(float3(currentNDC, 0.0f), g_ShadowConstants.viewProjection, did.z).xy;
     const uint2 pageCoordinates = virtualTextureUv.xy * PAGE_TABLE_RESOLUTION;
-    // TODO support clipmap index;
-    uint packedVptData = g_VirtualPageTable[uint3(pageCoordinates, 0)];
+    uint packedVptData = g_VirtualPageTable[uint3(pageCoordinates, did.z)];
     if (!isBacked(packedVptData))
     {
         // Nothing to clear.
