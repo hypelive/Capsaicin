@@ -94,6 +94,9 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     { .name                 = "LightSources",
      .fileName          = {"assets/CapsaicinTestMedia/LightSources/LightSources.glb"},
      .useEnvironmentMap = false},
+    { .name                 = "VSMTeapots",
+     .fileName          = {"assets/CapsaicinTestMedia/VSMTeapots/VSMTeapots.glb"},
+     .useEnvironmentMap = true},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {
