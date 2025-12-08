@@ -32,6 +32,7 @@ struct GBuffer
     float4 albedoMetallicity : SV_Target0;
     float4 normalRoughness : SV_Target1;
     float4 emission : SV_Target2;
+    float2 motionVector : SV_Target3;
 };
 
 struct ShadedVertex
@@ -50,6 +51,7 @@ ShadedVertex shadeVertex(Vertex vertex, float3x4 transform)
     float3 normal = transformNormal(vertex.getNormal(), transform);
 
     result.screenPosition = mul(g_DrawConstants.viewProjection, float4(worldPosition, 1.0f));
+    result.screenPosition /= result.screenPosition.w;
     result.worldPosition = worldPosition;
     result.uv = vertex.getUV();
     result.normal = normal;
@@ -145,7 +147,7 @@ float3 calculateEmission(Material material, float2 uv, float2 ddx, float2 ddy)
         result *= g_TextureMaps[NonUniformResourceIndex(emissivityTextureId)].SampleGrad(g_LinearSampler, uv, ddx, ddy).xyz;
     }
 
-    return result;        
+    return result;
 }
 
 void shadeVertices(UnpackedVisibilityBuffer visibilityBufferData, Instance instance, out ShadedVertex v0, out ShadedVertex v1, out ShadedVertex v2)
@@ -175,6 +177,13 @@ float3 calculateCameraDirection(float2 screenCoordinates)
     nearPlaneWorldPosition.xyz /= nearPlaneWorldPosition.w;
 
     return normalize(nearPlaneWorldPosition.xyz - g_DrawConstants.cameraPosition.xyz);
+}
+
+float2 calculateMotionVector(float2 prevScreenPosition, float2 currScreenPosition)
+{
+    const float2 prevUv = ndcToUv(prevScreenPosition);
+    const float2 currUv = currScreenPosition;
+    return prevUv - currUv;
 }
 
 GBuffer main(in VertexParams params)
@@ -209,11 +218,16 @@ GBuffer main(in VertexParams params)
     calculateTangentBitangent(vertex0, vertex1, vertex2, tangent, bitangent);
     float3 normal = calculateNormal(interpolants, tangent, bitangent, material, duvdx, duvdy);
     float3 packedNormal = normal * 0.5f + 0.5f;
+    
+    float4 prevScreenPosition = mul(g_DrawConstants.prevViewProjection, float4(interpolants.worldPosition, 1.0f));
+    prevScreenPosition.xyz /= prevScreenPosition.w;
+    float2 motionVector = calculateMotionVector(prevScreenPosition.xy, params.screenPosition.xy * g_DrawConstants.invScreenSize);
 
     GBuffer gBuffer;
     gBuffer.albedoMetallicity = float4(materialEvaluated.albedo, materialEvaluated.metallicity);
     gBuffer.normalRoughness = float4(packedNormal, materialEvaluated.roughness);
     gBuffer.emission = float4(calculateEmission(material, interpolants.uv, duvdx, duvdy), 0.0f);
+    gBuffer.motionVector = motionVector;
 
     return gBuffer;
 }
