@@ -106,7 +106,7 @@ void CustomVisibilityBuffer::render([[maybe_unused]] CapsaicinInternal &capsaici
     // Filling the draw constants.
     {
         VisibilityBufferConstants drawConstants  = {};
-        drawConstants.viewProjection = capsaicin.getCameraMatrices().view_projection;
+        drawConstants.viewProjection = capsaicin.getCameraMatrices(true).view_projection;
         drawConstants.drawCount      = m_drawDataSize;
 
         gfxDestroyBuffer(gfx_, m_drawConstantsBuffer);

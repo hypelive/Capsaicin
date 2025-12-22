@@ -90,7 +90,7 @@ bool CustomVisibilityToGBuffer::init([[maybe_unused]] const CapsaicinInternal& c
 void CustomVisibilityToGBuffer::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
 {
     const auto& gBuffer0       = capsaicin.getSharedTexture("GBuffer0");
-    const auto& cameraMatrices = capsaicin.getCameraMatrices();
+    const auto& cameraMatrices = capsaicin.getCameraMatrices(true);
 
     const auto& gpuDrawConstants = capsaicin.allocateConstantBuffer<VisibilityToGbufferConstants>(1);
     {
@@ -99,7 +99,7 @@ void CustomVisibilityToGBuffer::render([[maybe_unused]] CapsaicinInternal& capsa
         drawConstants.invViewProjection            = cameraMatrices.inv_view_projection;
         drawConstants.prevViewProjection           = cameraMatrices.view_projection_prev;
         drawConstants.cameraPosition               = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize = 1.0f / float2 {gBuffer0.getWidth(), gBuffer0.getHeight()};
+        drawConstants.invScreenSize  = 1.0f / float2{gBuffer0.getWidth(), gBuffer0.getHeight()};
 
         gfxBufferGetData<VisibilityToGbufferConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }

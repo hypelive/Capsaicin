@@ -21,7 +21,10 @@ public:
      */
     RenderOptionList getRenderOptions() noexcept override;
 
-    struct RenderOptions { };
+    struct RenderOptions
+    {
+        float m_historyWeight = 0.9f;
+    };
 
     /**
      * Convert render options to internal options format.

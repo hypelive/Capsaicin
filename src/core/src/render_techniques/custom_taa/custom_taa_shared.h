@@ -8,7 +8,9 @@
 struct TAAConstants
 {
     // .xy - screenSize, .zw - invScreenSize
-    float4   screenSize;
+    float4 screenSize;
+
+    float historyWeight;
 };
 
 #endif

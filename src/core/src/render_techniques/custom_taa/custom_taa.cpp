@@ -1,4 +1,5 @@
 #include "custom_taa.h"
+
 #include "capsaicin_internal.h"
 #include "custom_taa_shared.h"
 
@@ -8,7 +9,8 @@ static constexpr std::string_view TARGET_TEXTURE_NAME = "Color";
 namespace Capsaicin
 {
 CustomTAA::CustomTAA()
-    : RenderTechnique("CustomTAA") {}
+    : RenderTechnique("CustomTAA")
+{}
 
 CustomTAA::~CustomTAA()
 {
@@ -18,13 +20,14 @@ CustomTAA::~CustomTAA()
 RenderOptionList CustomTAA::getRenderOptions() noexcept
 {
     RenderOptionList newOptions;
+    newOptions.emplace(RENDER_OPTION_MAKE(m_historyWeight, m_options));
     return newOptions;
 }
 
-CustomTAA::RenderOptions CustomTAA::convertOptions(
-    [[maybe_unused]] RenderOptionList const &options) noexcept
+CustomTAA::RenderOptions CustomTAA::convertOptions([[maybe_unused]] const RenderOptionList& options) noexcept
 {
     RenderOptions newOptions;
+    RENDER_OPTION_GET(m_historyWeight, newOptions, options);
     return newOptions;
 }
 
@@ -45,6 +48,7 @@ SharedTextureList CustomTAA::getSharedTextures() const noexcept
     SharedTextureList textures;
     textures.push_back({SOURCE_TEXTURE_NAME, SharedTexture::Access::Read});
     textures.push_back({TARGET_TEXTURE_NAME, SharedTexture::Access::Write});
+    textures.push_back({"GBuffer3", SharedTexture::Access::Read});
     return textures;
 }
 
@@ -54,26 +58,26 @@ DebugViewList CustomTAA::getDebugViews() const noexcept
     return views;
 }
 
-bool CustomTAA::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
+bool CustomTAA::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noexcept
 {
-    m_program = capsaicin.createProgram("render_techniques/CustomTAA/custom_taa");
+    m_program = capsaicin.createProgram("render_techniques/custom_taa/custom_taa");
     m_kernel  = gfxCreateComputeKernel(gfx_, m_program);
 
     return m_kernel;
 }
 
-void CustomTAA::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
+void CustomTAA::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
 {
-    m_options                = convertOptions(capsaicin.getOptions());
-    auto const &targetTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
+    m_options                 = convertOptions(capsaicin.getOptions());
+    const auto& targetTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
 
     const glm::vec2 renderResolution = {targetTexture.getWidth(), targetTexture.getHeight()};
-    auto const &    gpuDrawConstants = capsaicin.allocateConstantBuffer<TAAConstants>(1);
+    const auto&     gpuDrawConstants = capsaicin.allocateConstantBuffer<TAAConstants>(1);
     {
-        TAAConstants drawConstants     = {};
-        drawConstants.screenSize        = glm::vec4{renderResolution.x, renderResolution.y,
-                                             1.0f / renderResolution.x,
-                                             1.0f / renderResolution.y};
+        TAAConstants drawConstants = {};
+        drawConstants.screenSize   = glm::vec4{
+            renderResolution.x, renderResolution.y, 1.0f / renderResolution.x, 1.0f / renderResolution.y};
+        drawConstants.historyWeight = m_options.m_historyWeight;
 
         gfxBufferGetData<TAAConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
     }
@@ -81,16 +85,18 @@ void CustomTAA::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
     // Set the root parameters for Computing CustomTAA.
     {
         gfxProgramSetParameter(gfx_, m_program, "g_Constants", gpuDrawConstants);
-        gfxProgramSetParameter(gfx_, m_program, "g_SourceTexture", capsaicin.getSharedTexture(SOURCE_TEXTURE_NAME));
+        gfxProgramSetParameter(
+            gfx_, m_program, "g_SourceTexture", capsaicin.getSharedTexture(SOURCE_TEXTURE_NAME));
+        gfxProgramSetParameter(gfx_, m_program, "g_MotionVectors", capsaicin.getSharedTexture("GBuffer3"));
         gfxProgramSetParameter(gfx_, m_program, "g_TargetTexture", targetTexture);
+        gfxProgramSetParameter(gfx_, m_program, "g_NearestSampler", capsaicin.getNearestSampler());
     }
 
     // Compute CustomTAA.
     {
         gfxCommandBindKernel(gfx_, m_kernel);
 
-        glm::uvec2 const groupCount =
-            ceil(renderResolution / static_cast<float>(TILE_SIZE));
+        const glm::uvec2 groupCount = ceil(renderResolution / static_cast<float>(TILE_SIZE));
         gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 
@@ -105,5 +111,5 @@ void CustomTAA::terminate() noexcept
     m_program = {};
 }
 
-void CustomTAA::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }
+void CustomTAA::renderGUI([[maybe_unused]] CapsaicinInternal& capsaicin) const noexcept {}
 } // namespace Capsaicin

@@ -219,6 +219,7 @@ GBuffer main(in VertexParams params)
     float3 normal = calculateNormal(interpolants, tangent, bitangent, material, duvdx, duvdy);
     float3 packedNormal = normal * 0.5f + 0.5f;
     
+    // TODO unjitter the MV
     float4 prevScreenPosition = mul(g_DrawConstants.prevViewProjection, float4(interpolants.worldPosition, 1.0f));
     prevScreenPosition.xyz /= prevScreenPosition.w;
     float2 motionVector = calculateMotionVector(prevScreenPosition.xy, params.screenPosition.xy * g_DrawConstants.invScreenSize);

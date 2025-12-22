@@ -1,14 +1,16 @@
 #include "custom_skybox.h"
+
 #include "capsaicin_internal.h"
-#include "custom_skybox_shared.h"
 #include "components/probe_baker/probe_baker.h"
+#include "custom_skybox_shared.h"
 
 static constexpr std::string_view TARGET_TEXTURE_NAME = "HDRColor";
 
 namespace Capsaicin
 {
 CustomSkybox::CustomSkybox()
-    : RenderTechnique("Custom Skybox") {}
+    : RenderTechnique("Custom Skybox")
+{}
 
 CustomSkybox::~CustomSkybox()
 {
@@ -22,7 +24,7 @@ RenderOptionList CustomSkybox::getRenderOptions() noexcept
 }
 
 CustomSkybox::RenderOptions CustomSkybox::convertOptions(
-    [[maybe_unused]] RenderOptionList const &options) noexcept
+    [[maybe_unused]] const RenderOptionList& options) noexcept
 {
     RenderOptions newOptions;
     return newOptions;
@@ -54,35 +56,35 @@ DebugViewList CustomSkybox::getDebugViews() const noexcept
     return views;
 }
 
-bool CustomSkybox::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
+bool CustomSkybox::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noexcept
 {
     m_skyboxProgram = capsaicin.createProgram("render_techniques/custom_skybox/custom_skybox");
 
-    GfxDrawState const skyboxDrawState = {};
+    const GfxDrawState skyboxDrawState = {};
     gfxDrawStateSetCullMode(skyboxDrawState, D3D12_CULL_MODE_BACK);
     gfxDrawStateSetDepthFunction(skyboxDrawState, D3D12_COMPARISON_FUNC_GREATER);
 
     gfxDrawStateSetColorTarget(
         skyboxDrawState, 0, capsaicin.getSharedTexture(TARGET_TEXTURE_NAME).getFormat());
-    gfxDrawStateSetDepthStencilTarget(
-        skyboxDrawState, capsaicin.getSharedTexture("Depth").getFormat());
+    gfxDrawStateSetDepthStencilTarget(skyboxDrawState, capsaicin.getSharedTexture("Depth").getFormat());
 
     m_skyboxKernel = gfxCreateGraphicsKernel(gfx_, m_skyboxProgram, skyboxDrawState);
 
     return m_skyboxKernel;
 }
 
-void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
+void CustomSkybox::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
 {
-    auto const &colorTexture = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
+    const auto& colorTexture   = capsaicin.getSharedTexture(TARGET_TEXTURE_NAME);
+    const auto& cameraMatrices = capsaicin.getCameraMatrices(true);
 
-    const auto &drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
+    const auto& drawConstantsBuffer = capsaicin.allocateConstantBuffer<SkyboxConstants>(1);
     // Filling the draw constants.
     {
         SkyboxConstants drawConstants   = {};
-        drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
+        drawConstants.invViewProjection = cameraMatrices.inv_view_projection;
         drawConstants.cameraPosition    = capsaicin.getCamera().eye;
-        drawConstants.invScreenSize     = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
+        drawConstants.invScreenSize  = 1.0f / float2{colorTexture.getWidth(), colorTexture.getHeight()};
 
         gfxBufferGetData<SkyboxConstants>(gfx_, drawConstantsBuffer)[0] = drawConstants;
     }
@@ -90,8 +92,7 @@ void CustomSkybox::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcep
     // Set the root parameters.
     {
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_DrawConstants", drawConstantsBuffer);
-        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap",
-            capsaicin.getEnvironmentBuffer());
+        gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_EnvironmentMap", capsaicin.getEnvironmentBuffer());
 
         gfxProgramSetParameter(gfx_, m_skyboxProgram, "g_LinearSampler", capsaicin.getLinearSampler());
 
@@ -113,5 +114,5 @@ void CustomSkybox::terminate() noexcept
     m_skyboxProgram = {};
 }
 
-void CustomSkybox::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }
+void CustomSkybox::renderGUI([[maybe_unused]] CapsaicinInternal& capsaicin) const noexcept {}
 } // namespace Capsaicin

@@ -1,11 +1,13 @@
 #include "ssao.h"
+
 #include "capsaicin_internal.h"
 #include "ssao_shared.h"
 
 namespace Capsaicin
 {
 SSAO::SSAO()
-    : RenderTechnique("SSAO") {}
+    : RenderTechnique("SSAO")
+{}
 
 SSAO::~SSAO()
 {
@@ -19,8 +21,7 @@ RenderOptionList SSAO::getRenderOptions() noexcept
     return newOptions;
 }
 
-SSAO::RenderOptions SSAO::convertOptions(
-    [[maybe_unused]] RenderOptionList const &options) noexcept
+SSAO::RenderOptions SSAO::convertOptions([[maybe_unused]] const RenderOptionList& options) noexcept
 {
     RenderOptions newOptions;
     RENDER_OPTION_GET(m_radius, newOptions, options);
@@ -57,7 +58,7 @@ DebugViewList SSAO::getDebugViews() const noexcept
     return views;
 }
 
-bool SSAO::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
+bool SSAO::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noexcept
 {
     m_ssaoProgram = capsaicin.createProgram("render_techniques/ssao/ssao");
     m_ssaoKernel  = gfxCreateComputeKernel(gfx_, m_ssaoProgram);
@@ -67,21 +68,21 @@ bool SSAO::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
     return m_ssaoKernel && m_blurKernel;
 }
 
-void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
+void SSAO::render([[maybe_unused]] CapsaicinInternal& capsaicin) noexcept
 {
-    m_options                = convertOptions(capsaicin.getOptions());
-    const auto &depthTexture = capsaicin.getSharedTexture("DepthCopy");
+    m_options                  = convertOptions(capsaicin.getOptions());
+    const auto& depthTexture   = capsaicin.getSharedTexture("DepthCopy");
+    const auto& cameraMatrices = capsaicin.getCameraMatrices(true);
 
     const glm::vec2 renderResolution = {depthTexture.getWidth(), depthTexture.getHeight()};
-    auto const &    gpuDrawConstants = capsaicin.allocateConstantBuffer<SSAOConstants>(1);
+    const auto&     gpuDrawConstants = capsaicin.allocateConstantBuffer<SSAOConstants>(1);
     {
         SSAOConstants drawConstants     = {};
-        drawConstants.viewProjection    = capsaicin.getCameraMatrices().view_projection;
-        drawConstants.invViewProjection = capsaicin.getCameraMatrices().inv_view_projection;
+        drawConstants.viewProjection    = cameraMatrices.view_projection;
+        drawConstants.invViewProjection = cameraMatrices.inv_view_projection;
         drawConstants.cameraPosition    = capsaicin.getCamera().eye;
-        drawConstants.screenSize        = glm::vec4{renderResolution.x, renderResolution.y,
-                                             1.0f / renderResolution.x,
-                                             1.0f / renderResolution.y};
+        drawConstants.screenSize     = glm::vec4{
+            renderResolution.x, renderResolution.y, 1.0f / renderResolution.x, 1.0f / renderResolution.y};
         drawConstants.radius = m_options.m_radius;
 
         gfxBufferGetData<SSAOConstants>(gfx_, gpuDrawConstants)[0] = drawConstants;
@@ -94,16 +95,14 @@ void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_GBuffer1", capsaicin.getSharedTexture("GBuffer1"));
         gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_AO", capsaicin.getSharedTexture("TempAO"));
 
-        gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_NearestSampler",
-            capsaicin.getNearestSampler());
+        gfxProgramSetParameter(gfx_, m_ssaoProgram, "g_NearestSampler", capsaicin.getNearestSampler());
     }
 
     // Compute SSAO.
     {
         gfxCommandBindKernel(gfx_, m_ssaoKernel);
 
-        glm::uvec2 const groupCount =
-            ceil(renderResolution / static_cast<float>(TILE_SIZE));
+        const glm::uvec2 groupCount = ceil(renderResolution / static_cast<float>(TILE_SIZE));
         gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 
@@ -118,7 +117,7 @@ void SSAO::render([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
     {
         gfxCommandBindKernel(gfx_, m_blurKernel);
 
-        glm::uvec2 const groupCount = ceil(renderResolution / static_cast<float>(TILE_SIZE));
+        const glm::uvec2 groupCount = ceil(renderResolution / static_cast<float>(TILE_SIZE));
         gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1);
     }
 
@@ -133,5 +132,5 @@ void SSAO::terminate() noexcept
     m_ssaoProgram = {};
 }
 
-void SSAO::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) const noexcept { }
+void SSAO::renderGUI([[maybe_unused]] CapsaicinInternal& capsaicin) const noexcept {}
 } // namespace Capsaicin

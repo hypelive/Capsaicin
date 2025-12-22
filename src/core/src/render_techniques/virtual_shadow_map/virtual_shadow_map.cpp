@@ -135,7 +135,7 @@ void VirtualShadowMap::render([[maybe_unused]] CapsaicinInternal& capsaicin) noe
     const glm::mat4x4 lightViewProjection = shadowStructures->m_lightViewProjection;
     auto const&       gpuDrawConstants    = capsaicin.allocateConstantBuffer<VSMConstants>(1);
     {
-        const auto& cameraMatrices = capsaicin.getCameraMatrices();
+        const auto& cameraMatrices = capsaicin.getCameraMatrices(true);
         const auto& camera         = capsaicin.getCamera();
 
         VSMConstants drawConstants        = {};
