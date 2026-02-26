@@ -1,6 +1,7 @@
 #pragma once
 
 #include "components/component.h"
+#include "lights/lights_shared.h"
 
 namespace Capsaicin
 {

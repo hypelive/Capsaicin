@@ -83,20 +83,11 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     {          .name                 = "Sponza",
      .fileName          = {"assets/CapsaicinTestMedia/sponza/Sponza.gltf"},
      .useEnvironmentMap = true},
-    {          .name                 = "Minecraft",
-     .fileName          = {"assets/CapsaicinTestMedia/minecraft/vokselia_spawn.obj"},
-     .useEnvironmentMap = true},
     {          .name                 = "RoughnessMetallicSpheres",
-     .fileName          = {"assets/CapsaicinTestMedia/RoughnessMetallicSpheres/RoughnessMetallicSpheres.glb"},
+     .fileName          = {"assets/Custom/RoughnessMetallicSpheres/RoughnessMetallicSpheres.glb"},
      .useEnvironmentMap = true},
-    { .name        = "NormalMapPlanes",
-     .fileName = {"assets/CapsaicinTestMedia/NormalMapPlanes/NormalMapPlanes.glb"},
-     .useEnvironmentMap = true},
-    { .name                 = "LightSources",
-     .fileName          = {"assets/CapsaicinTestMedia/LightSources/LightSources.glb"},
-     .useEnvironmentMap = false},
     { .name                 = "VSMTeapots",
-     .fileName          = {"assets/CapsaicinTestMedia/VSMTeapots/VSMTeapots.glb"},
+     .fileName          = {"assets/Custom/VSMTeapots/VSMTeapots.glb"},
      .useEnvironmentMap = true},
 };
 
@@ -364,8 +355,8 @@ bool CapsaicinMain::initialise() noexcept
     try
     {
         // Default application settings
-        uint32_t windowWidth  = 1920;
-        uint32_t windowHeight = 1080;
+        uint32_t windowWidth  = 2560;
+        uint32_t windowHeight = 1440;
         float    renderScale  = 1.0F;
         bool     fullScreen   = false;
 
