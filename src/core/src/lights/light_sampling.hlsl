@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "geometry/geometry.hlsl"
 #include "math/math_constants.hlsl"
 #include "math/sampling.hlsl"
+#include "box_sampling.hlsl"
 
 /**
  * Sample the direction, solid angle PDF and position on a given area light.
@@ -54,18 +55,19 @@ float3 sampleAreaLight(LightArea light, float2 samples, float3 position, out flo
     float3 lightCross = cross(edge1, edge2);
     // Calculate surface area of triangle
     float lightNormalLength = length(lightCross);
-    float3 lightNormal = lightCross / lightNormalLength.xxx;
+    float3 lightNormal = lightCross / lightNormalLength;
     float lightArea = 0.5f * lightNormalLength;
 
     // Determine light direction
     float3 lightVector = lightPosition - position;
-    float3 lightDirection = normalize(lightVector);
+    float lightLengthSqr = lengthSqr(lightVector);
+    float3 lightDirection = lightVector * rsqrt(lightLengthSqr);
 
     // Calculate PDF as solid angle measurement
     // The PDF is simply (1/area) converted to PDF of solid angle by dividing by (n.l/d^2)
     // We support back face triangles so we use abs to handle back face cases
-    pdf = saturate(abs(dot(lightNormal, -lightDirection))) * lightArea;
-    pdf = (pdf != 0.0f) ? lengthSqr(lightVector) / pdf : 0.0f;
+    pdf = saturate(abs(dot(lightNormal, /*-*/lightDirection))) * lightArea;
+    pdf = (pdf != 0.0f) ? lightLengthSqr / pdf : 0.0f;
 
     return lightDirection;
 }
@@ -94,14 +96,13 @@ float3 sampleAreaLightAM(LightArea light, float2 samples, float3 position, out f
     float3 edge1 = light.v1 - light.v0;
     float3 edge2 = light.v2 - light.v0;
     float3 lightCross = cross(edge1, edge2);
-    // Calculate surface area of triangle
-    float lightNormalLength = length(lightCross);
 
     // Determine light direction
     float3 lightDirection = normalize(lightPosition - position);
 
     // Calculate PDF as area measurement
     // The PDF is simply (1/area)
+    float lightNormalLength = length(lightCross);
     pdf = 2.0F / lightNormalLength;
 
     return lightDirection;
@@ -110,11 +111,11 @@ float3 sampleAreaLightAM(LightArea light, float2 samples, float3 position, out f
 /**
  * Calculate the solid angle PDF of sampling a given area light.
  * @param light           The light that was sampled.
- * @param shadingPosition The position on the surface currently being shaded.
+ * @param position        The position on the surface currently being shaded.
  * @param lightPosition   The position on the surface of the light.
  * @return The calculated PDF with respect to the light.
  */
-float sampleAreaLightPDF(LightArea light, float3 shadingPosition, float3 lightPosition)
+float sampleAreaLightPDF(LightArea light, float3 position, float3 lightPosition)
 {
     // Calculate lights surface normal vector
     float3 edge1 = light.v1 - light.v0;
@@ -122,14 +123,15 @@ float sampleAreaLightPDF(LightArea light, float3 shadingPosition, float3 lightPo
     float3 lightCross = cross(edge1, edge2);
     // Calculate surface area of triangle
     float lightNormalLength = length(lightCross);
-    float3 lightNormal = lightCross / lightNormalLength.xxx;
+    float3 lightNormal = lightCross / lightNormalLength;
     float lightArea = 0.5f * lightNormalLength;
 
     // Evaluate PDF for current position and direction
-    float3 lightVector = shadingPosition - lightPosition;
-    float3 lightDirection = normalize(lightVector);
+    float3 lightVector = lightPosition - position;
+    float lightLengthSqr = lengthSqr(lightVector);
+    float3 lightDirection = lightVector * rsqrt(lightLengthSqr);
     float pdf = saturate(abs(dot(lightNormal, lightDirection))) * lightArea;
-    pdf = (pdf != 0.0f) ? lengthSqr(lightVector) / pdf : 0.0f;
+    pdf = (pdf != 0.0f) ? lightLengthSqr / pdf : 0.0f;
     return pdf;
 }
 
@@ -144,10 +146,9 @@ float sampleAreaLightPDFAM(LightArea light)
     float3 edge1 = light.v1 - light.v0;
     float3 edge2 = light.v2 - light.v0;
     float3 lightCross = cross(edge1, edge2);
-    // Calculate surface area of triangle
-    float lightNormalLength = length(lightCross);
 
-    // Evaluate PDF for current position and direction
+    // Calculate PDF as area measurement
+    float lightNormalLength = length(lightCross);
     float pdf = 2.0F / lightNormalLength;
     return pdf;
 }
@@ -162,21 +163,21 @@ float sampleAreaLightPDFAM(LightArea light)
  */
 float3 sampleEnvironmentLight(LightEnvironment light, float2 samples, float3 normal, out float pdf)
 {
-    // Currently just uses a cosine hemispherical sample
-#ifdef ENABLE_COSINE_ENVIRONMENT_SAMPLING
+#if defined(ENABLE_COSINE_ENVIRONMENT_SAMPLING)
     // Sample cosine sphere
     float3 lightDirection = mapToCosineHemisphere(samples, normal);
-
     // Set PDF
     pdf = saturate(dot(normal, lightDirection)) * INV_PI;
+#elif defined(ENABLE_ENVIRONMENT_IMPORTANCE_SAMPLING)
+    float3 cubePosition = importanceSampleBoxByLuminance(g_EnvironmentBuffer, g_TextureSampler, samples, 0, light.mips, pdf);
+    // PDF is already set by the above function call
+    float3 lightDirection = normalize(cubePosition);
 #else
     // Sample uniform sphere
     float3 lightDirection = mapToHemisphere(samples, normal);
-
     // Set PDF
     pdf = INV_TWO_PI;
 #endif
-
     return lightDirection;
 }
 
@@ -189,8 +190,10 @@ float3 sampleEnvironmentLight(LightEnvironment light, float2 samples, float3 nor
  */
 float sampleEnvironmentLightPDF(LightEnvironment light, float3 lightDirection, float3 normal)
 {
-#ifdef ENABLE_COSINE_ENVIRONMENT_SAMPLING
+#if defined(ENABLE_COSINE_ENVIRONMENT_SAMPLING)
     float pdf = saturate(dot(normal, lightDirection)) * INV_PI;
+#elif defined(ENABLE_ENVIRONMENT_IMPORTANCE_SAMPLING)
+    float pdf = boxLuminancePDF(g_EnvironmentBuffer, g_TextureSampler, lightDirection, light.width);
 #else
     // Currently just uniformly samples a hemisphere
     float pdf = INV_TWO_PI;
@@ -918,7 +921,7 @@ float sampleLightPDFAM(Light selectedLight, float3 position, float3 normal, floa
 }
 
 /**
- * Get the direction to a sampled light using a sample values returned from `sampleLight`.
+ * Get the direction to a sampled light using sample values returned from `sampleLight`.
  * @param light               The light that was sampled.
  * @param sampleParams        UV values returned from `sampleLight`.
  * @param position            Current position on surface to get direction from.
@@ -948,7 +951,7 @@ float3 sampledLightUnpack(Light light, float2 sampleParams, float3 position, flo
 #       endif
 #   endif // DISABLE_AREA_LIGHTS
 #   ifndef DISABLE_DELTA_LIGHTS
-    if (lightType < kLight_Direction) /* Faster check for point or spot light */
+    if (lightType < kLight_Direction) /* Faster check for point or spot-light */
     {
         // Calculate direction
         lightPosition = light.v1.xyz;
@@ -980,7 +983,7 @@ float3 sampledLightUnpack(Light light, float2 sampleParams, float3 position, flo
 }
 
 /**
- * Get the direction to a sampled light using a sample values returned from @sampleLightSampled.
+ * Get the direction to a sampled light using sample values returned from @sampleLightSampled.
  * @param light        The light that was sampled.
  * @param sampleParams UV values returned from `sampleLight`.
  * @param position     Current position on surface to get direction from.
@@ -991,6 +994,43 @@ float3 sampledLightUnpack(Light light, float2 sampleParams, float3 position, flo
 {
     float3 unused;
     return sampledLightUnpack(light, sampleParams, position, normal, unused);
+}
+
+/**
+ * Get the position on a sampled light using sample values returned from `sampleLight`.
+ * @param light        The light that was sampled.
+ * @param sampleParams UV values returned from `sampleLight`.
+ * @return The position of the light sample (only valid if sampled light has a position).
+ */
+float3 sampledLightUnpack(Light light, float2 sampleParams)
+{
+#if defined(DISABLE_AREA_LIGHTS) && defined(DISABLE_DELTA_LIGHTS) && defined(DISABLE_ENVIRONMENT_LIGHTS)
+    return 0.0f.xxx;
+#else
+#   ifdef HAS_MULTIPLE_LIGHT_TYPES
+    LightType lightType = light.get_light_type();
+#   endif
+#   ifndef DISABLE_AREA_LIGHTS
+#       if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
+    if (lightType == kLight_Area)
+#       endif
+    {
+        return interpolate(light.v1.xyz, light.v2.xyz, light.v3.xyz, sampleParams);
+    }
+#       if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
+    else
+#       endif
+#   endif // DISABLE_AREA_LIGHTS
+#   ifndef DISABLE_DELTA_LIGHTS
+    if (lightType < kLight_Direction) /* Faster check for point or spot-light */
+    {
+        return light.v1.xyz;
+    }
+#   endif
+#   if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
+    return 0.0f.xxx;
+#   endif
+#endif
 }
 
 #endif // LIGHT_SAMPLING_HLSL

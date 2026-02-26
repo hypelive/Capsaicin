@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -74,7 +74,8 @@ LightArea MakeLightArea(float3 vertex0, float3 vertex1, float3 vertex2, float4 e
 /** Light data representing a environment light */
 struct LightEnvironment
 {
-    uint lods; /**< The number of mip map levels in each face of the texture */
+    uint mips; /**< The number of mip map levels in each face of the texture */
+    uint width; /**< The environment map texture width/height */
 };
 
 /**
@@ -86,7 +87,7 @@ LightEnvironment MakeLightEnvironment(Light light)
 {
     LightEnvironment ret =
     {
-        asuint(light.radiance.x)
+        asuint(light.radiance.x), asuint(light.radiance.y)
     };
     return ret;
 }
@@ -113,7 +114,7 @@ LightPoint MakeLightPoint(Light light)
     return ret;
 }
 
-/** Light data representing a spot light */
+/** Light data representing a spot-light */
 struct LightSpot
 {
     float3 position; /**< The light world space position */

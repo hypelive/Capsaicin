@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,10 +22,13 @@ THE SOFTWARE.
 
 #include "light_sampler_grid_stream.h"
 
-#include "../light_builder/light_builder.h"
-#include "../light_sampler_grid_cdf/light_sampler_grid_shared.h"
 #include "capsaicin_internal.h"
 #include "components/brdf_lut/brdf_lut.h"
+#include "components/light_builder/light_builder.h"
+#include "components/light_sampler_grid_cdf/light_sampler_grid_shared.h"
+#include "components/random_number_generator/random_number_generator.h"
+
+using namespace std;
 
 namespace Capsaicin
 {
@@ -48,6 +51,7 @@ RenderOptionList LightSamplerGridStream::getRenderOptions() noexcept
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_stream_merge_type, options));
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_stream_parallel_build, options));
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_stream_centroid_build, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(light_grid_stream_cell_overlap, options));
     return newOptions;
 }
 
@@ -62,6 +66,7 @@ LightSamplerGridStream::RenderOptions LightSamplerGridStream::convertOptions(
     RENDER_OPTION_GET(light_grid_stream_merge_type, newOptions, options)
     RENDER_OPTION_GET(light_grid_stream_parallel_build, newOptions, options)
     RENDER_OPTION_GET(light_grid_stream_centroid_build, newOptions, options)
+    RENDER_OPTION_GET(light_grid_stream_cell_overlap, newOptions, options)
     return newOptions;
 }
 
@@ -70,6 +75,7 @@ ComponentList LightSamplerGridStream::getComponents() const noexcept
     ComponentList components;
     components.emplace_back(COMPONENT_MAKE(LightBuilder));
     components.emplace_back(COMPONENT_MAKE(BrdfLut));
+    components.emplace_back(COMPONENT_MAKE(RandomNumberGenerator));
     return components;
 }
 
@@ -93,6 +99,7 @@ bool LightSamplerGridStream::init(CapsaicinInternal const &capsaicin) noexcept
         float3 sceneMin;
         float  pack2;
         float3 sceneExtent;
+        float  pack3;
     };
 
     configBuffer = gfxCreateBuffer<LightSamplingConfiguration>(gfx_, 1);
@@ -108,9 +115,65 @@ bool LightSamplerGridStream::init(CapsaicinInternal const &capsaicin) noexcept
 
 void LightSamplerGridStream::run(CapsaicinInternal &capsaicin) noexcept
 {
+    // Update internal options
+    auto const optionsNew   = convertOptions(capsaicin.getOptions());
+    auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
+
+    // Sanity check input options
+    options.light_grid_stream_num_cells       = glm::max(options.light_grid_stream_num_cells, 1U);
+    options.light_grid_stream_lights_per_cell = glm::max(options.light_grid_stream_lights_per_cell, 1U);
+
+    // Check if many lights kernel should be run. This requires greater than 128 lights per reservoir as
+    // otherwise there will be empty reservoirs. Note: The 128 must match the LS_GRID_STREAM_THREADREDUCE
+    // value which is currently set to the largest possible wave size. If targeting a specific platform then
+    // matching this value with the wave size will give better results.
+    bool const manyLights = options.light_grid_stream_parallel_build
+                         && (lightBuilder->getLightCount() > 128 * options.light_grid_stream_lights_per_cell);
+
+    recompileFlag =
+        optionsNew.light_grid_stream_octahedron_sampling != options.light_grid_stream_octahedron_sampling
+        || optionsNew.light_grid_stream_resample != options.light_grid_stream_resample
+        || optionsNew.light_grid_stream_merge_type != options.light_grid_stream_merge_type
+        || optionsNew.light_grid_stream_centroid_build != options.light_grid_stream_centroid_build
+        || optionsNew.light_grid_stream_cell_overlap != options.light_grid_stream_cell_overlap
+        || usingManyLights != manyLights || lightBuilder->needsRecompile(capsaicin);
+    lightSettingsUpdatedFlag =
+        optionsNew.light_grid_stream_octahedron_sampling != options.light_grid_stream_octahedron_sampling
+        || optionsNew.light_grid_stream_lights_per_cell != options.light_grid_stream_lights_per_cell
+        || optionsNew.light_grid_stream_num_cells != options.light_grid_stream_num_cells
+        || optionsNew.light_grid_stream_centroid_build != options.light_grid_stream_centroid_build
+        || optionsNew.light_grid_stream_cell_overlap != options.light_grid_stream_cell_overlap
+        || usingManyLights != manyLights || lightBuilder->getLightIndexesChanged();
+    options         = optionsNew;
+    usingManyLights = manyLights;
+
+    uint32_t const numCells = options.light_grid_stream_num_cells;
+    uint lightDataLength    = numCells * numCells * numCells * options.light_grid_stream_lights_per_cell;
+    if (options.light_grid_stream_octahedron_sampling)
+    {
+        lightDataLength *= 8;
+    }
+    if (lightIndexBuffer.getCount() < lightDataLength)
+    {
+        gfxDestroyBuffer(gfx_, lightIndexBuffer);
+        gfxDestroyBuffer(gfx_, lightReservoirBuffer);
+        initLightIndexBuffer();
+    }
+
+    if (recompileFlag)
+    {
+        gfxDestroyKernel(gfx_, calculateBoundsKernel);
+        gfxDestroyKernel(gfx_, buildKernel);
+        gfxDestroyProgram(gfx_, boundsProgram);
+        gfxDestroyProgram(gfx_, buildProgram);
+
+        initKernels(capsaicin);
+    }
+
     if (boundsReservations.size() > (boundsHostReservations.empty() ? 0 : 1))
     {
         // Nothing to do as requires explicit call to LightSamplerGridStream::update()
+        return;
     }
     else
     {
@@ -172,9 +235,11 @@ void LightSamplerGridStream::renderGUI(CapsaicinInternal &capsaicin) const noexc
         // &capsaicin.getOption<bool>("light_grid_stream_octahedron_sampling"));
         ImGui::Checkbox(
             "Fast Centroid Build", &capsaicin.getOption<bool>("light_grid_stream_centroid_build"));
+        constexpr array<char const *, 3> mergeAlgorithmList = {
+            "Random Select", "Without Replacement", "With Replacement"};
         ImGui::Combo("Merge Algorithm",
             reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("light_grid_stream_merge_type")),
-            "Random Select\0Without Replacement\0With Replacement");
+            mergeAlgorithmList.data(), static_cast<int32_t>(mergeAlgorithmList.size()));
         bool const usingRandomMerge = capsaicin.getOption<uint32_t>("light_grid_stream_merge_type") == 0;
         if (usingRandomMerge)
         {
@@ -189,7 +254,7 @@ void LightSamplerGridStream::renderGUI(CapsaicinInternal &capsaicin) const noexc
     }
 }
 
-void LightSamplerGridStream::reserveBoundsValues(uint32_t reserve, std::type_info const &caller) noexcept
+void LightSamplerGridStream::reserveBoundsValues(uint32_t reserve, type_info const &caller) noexcept
 {
     boundsReservations.emplace(caller.hash_code(), reserve);
     // Determine if current buffer needs to be reallocated
@@ -209,8 +274,7 @@ void LightSamplerGridStream::reserveBoundsValues(uint32_t reserve, std::type_inf
     }
 }
 
-void LightSamplerGridStream::setBounds(
-    std::pair<float3, float3> const &bounds, std::type_info const &caller) noexcept
+void LightSamplerGridStream::setBounds(pair<float3, float3> const &bounds, type_info const &caller) noexcept
 {
     // Add to internal host reservations
     boundsHostReservations.emplace(caller.hash_code(), bounds);
@@ -221,67 +285,14 @@ void LightSamplerGridStream::setBounds(
 
 void LightSamplerGridStream::update(CapsaicinInternal &capsaicin, Timeable *parent) noexcept
 {
-    // Update internal options
-    auto const optionsNew   = convertOptions(capsaicin.getOptions());
-    auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
-
-    // Sanity check input options
-    options.light_grid_stream_num_cells       = glm::max(options.light_grid_stream_num_cells, 1U);
-    options.light_grid_stream_lights_per_cell = glm::max(options.light_grid_stream_lights_per_cell, 1U);
-
-    // Check if many lights kernel should be run. This requires greater than 128 lights per reservoir as
-    // otherwise there will be empty reservoirs. Note: The 128 must match the LS_GRID_STREAM_THREADREDUCE
-    // value which is currently set to the largest possible wave size. If targeting a specific platform then
-    // matching this value with the wave size will give better results.
-    bool const manyLights = options.light_grid_stream_parallel_build
-                         && (lightBuilder->getLightCount() > 128 * options.light_grid_stream_lights_per_cell);
-
-    recompileFlag =
-        optionsNew.light_grid_stream_octahedron_sampling != options.light_grid_stream_octahedron_sampling
-        || optionsNew.light_grid_stream_resample != options.light_grid_stream_resample
-        || optionsNew.light_grid_stream_merge_type != options.light_grid_stream_merge_type
-        || optionsNew.light_grid_stream_centroid_build != options.light_grid_stream_centroid_build
-        || usingManyLights != manyLights || lightBuilder->needsRecompile(capsaicin);
-    lightSettingsUpdatedFlag =
-        optionsNew.light_grid_stream_octahedron_sampling != options.light_grid_stream_octahedron_sampling
-        || optionsNew.light_grid_stream_lights_per_cell != options.light_grid_stream_lights_per_cell
-        || optionsNew.light_grid_stream_num_cells != options.light_grid_stream_num_cells
-        || optionsNew.light_grid_stream_centroid_build != options.light_grid_stream_centroid_build
-        || usingManyLights != manyLights || lightBuilder->getLightIndexesChanged();
-    options         = optionsNew;
-    usingManyLights = manyLights;
-
-    uint32_t const numCells = options.light_grid_stream_num_cells;
-    uint lightDataLength    = numCells * numCells * numCells * options.light_grid_stream_lights_per_cell;
-    if (options.light_grid_stream_octahedron_sampling)
-    {
-        lightDataLength *= 8;
-    }
-    if (lightIndexBuffer.getCount() < lightDataLength)
-    {
-        gfxDestroyBuffer(gfx_, lightIndexBuffer);
-        gfxDestroyBuffer(gfx_, lightReservoirBuffer);
-        initLightIndexBuffer();
-    }
-
-    if (recompileFlag)
-    {
-        gfxDestroyKernel(gfx_, calculateBoundsKernel);
-        gfxDestroyKernel(gfx_, buildKernel);
-        gfxDestroyProgram(gfx_, boundsProgram);
-        gfxDestroyProgram(gfx_, buildProgram);
-
-        initKernels(capsaicin);
-    }
-
     // Calculate host side maximum bounds
     bool hostUpdated = false;
     if (!boundsHostReservations.empty())
     {
         // Sum up everything in boundsHostReservations
-        std::pair<float3, float3> newBounds = boundsHostReservations[0];
+        pair<float3, float3> newBounds = boundsHostReservations[0];
         for (auto const &i :
-            std::ranges::subrange(++boundsHostReservations.cbegin(), boundsHostReservations.cend()))
+            ranges::subrange(++boundsHostReservations.cbegin(), boundsHostReservations.cend()))
         {
             newBounds.first  = min(newBounds.first, i.second.first);
             newBounds.second = max(newBounds.second, i.second.second);
@@ -341,10 +352,12 @@ void LightSamplerGridStream::update(CapsaicinInternal &capsaicin, Timeable *pare
     {
         TimedSection const timedSection(*parent, "CalculateLightSamplerConfiguration");
 
+        auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
+
         // Update constants buffer
         GfxBuffer const samplingConstants   = capsaicin.allocateConstantBuffer<LightSamplingConstants>(1);
         LightSamplingConstants constantData = {};
-        constantData.maxCellsPerAxis        = numCells;
+        constantData.maxCellsPerAxis        = options.light_grid_stream_num_cells;
         constantData.maxNumLightsPerCell    = options.light_grid_stream_lights_per_cell;
         gfxBufferGetData<LightSamplingConstants>(gfx_, samplingConstants)[0] = constantData;
 
@@ -363,6 +376,10 @@ void LightSamplerGridStream::update(CapsaicinInternal &capsaicin, Timeable *pare
 
         // Release constant buffer
         gfxDestroyBuffer(gfx_, samplingConstants);
+
+        // Clear the light buffers
+        gfxCommandClearBuffer(gfx_, lightIndexBuffer, numeric_limits<uint32_t>::max());
+        gfxCommandClearBuffer(gfx_, lightReservoirBuffer, 0);
     }
 
     // Create the light sampling structure
@@ -392,11 +409,10 @@ bool LightSamplerGridStream::needsRecompile(
     return recompileFlag;
 }
 
-std::vector<std::string> LightSamplerGridStream::getShaderDefines(
-    CapsaicinInternal const &capsaicin) const noexcept
+vector<string> LightSamplerGridStream::getShaderDefines(CapsaicinInternal const &capsaicin) const noexcept
 {
-    auto const  lightBuilder = capsaicin.getComponent<LightBuilder>();
-    std::vector baseDefines(lightBuilder->getShaderDefines(capsaicin));
+    auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
+    vector     baseDefines(lightBuilder->getShaderDefines(capsaicin));
     if (options.light_grid_stream_octahedron_sampling)
     {
         baseDefines.emplace_back("LIGHTSAMPLERSTREAM_USE_OCTAHEDRON_SAMPLING");
@@ -417,6 +433,10 @@ std::vector<std::string> LightSamplerGridStream::getShaderDefines(
     {
         baseDefines.emplace_back("LIGHT_SAMPLE_VOLUME_CENTROID");
     }
+    if (options.light_grid_stream_cell_overlap)
+    {
+        baseDefines.emplace_back("LIGHT_SAMPLE_VOLUME_OVERLAP");
+    }
     if (usingManyLights)
     {
         baseDefines.emplace_back("LIGHTSAMPLERSTREAM_RES_MANYLIGHTS");
@@ -433,6 +453,9 @@ void LightSamplerGridStream::addProgramParameters(
     auto const brdf_lut = capsaicin.getComponent<BrdfLut>();
     brdf_lut->addProgramParameters(capsaicin, boundsProgram);
 
+    auto const rng = capsaicin.getComponent<RandomNumberGenerator>();
+    rng->addProgramParameters(capsaicin, program);
+
     // Bind the light sampling shader parameters
     gfxProgramSetParameter(gfx_, program, "g_LightSampler_BoundsLength", boundsLengthBuffer);
     gfxProgramSetParameter(gfx_, program, "g_LightSampler_MinBounds", boundsMinBuffer);
@@ -448,9 +471,9 @@ bool LightSamplerGridStream::getLightSettingsUpdated(CapsaicinInternal const &ca
     return lightSettingsUpdatedFlag || capsaicin.getComponent<LightBuilder>()->getLightSettingsUpdated();
 }
 
-std::string_view LightSamplerGridStream::getHeaderFile() const noexcept
+string_view LightSamplerGridStream::getHeaderFile() const noexcept
 {
-    return "\"../../components/light_sampler_grid_stream/light_sampler_grid_stream.hlsl\"";
+    return "\"components/light_sampler_grid_stream/light_sampler_grid_stream.hlsl\"";
 }
 
 bool LightSamplerGridStream::initKernels(CapsaicinInternal const &capsaicin) noexcept
@@ -459,8 +482,8 @@ bool LightSamplerGridStream::initKernels(CapsaicinInternal const &capsaicin) noe
         capsaicin.createProgram("components/light_sampler_grid_stream/light_sampler_grid_stream_bounds");
     buildProgram =
         capsaicin.createProgram("components/light_sampler_grid_stream/light_sampler_grid_stream_build");
-    auto const                baseDefines(getShaderDefines(capsaicin));
-    std::vector<char const *> defines;
+    auto const           baseDefines(getShaderDefines(capsaicin));
+    vector<char const *> defines;
     defines.reserve(baseDefines.size());
     for (auto const &i : baseDefines)
     {

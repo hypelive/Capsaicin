@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -36,10 +36,10 @@ Texture2D g_TextureMaps[];
 SamplerState g_TextureSampler; // Should be a linear sampler
 */
 
+#include "ray_tracing.hlsl"
 #include "materials/materials.hlsl"
 #include "geometry/geometry.hlsl"
 #include "geometry/mesh.hlsl"
-#include "geometry/ray_tracing.hlsl"
 #include "math/transform.hlsl"
 
 /** Data representing a surface intersection with full details */
@@ -69,7 +69,7 @@ struct IntersectDataVertex
 };
 
 /**
- * Determine the vertex data data for a ray hit.
+ * Determine the vertex data for a ray hit.
  * @param hitData The intersection information for a ray hit.
  * @return The vertex data associated with the intersection.
  */
@@ -143,7 +143,7 @@ IntersectData MakeIntersectData(HitInfo hitData)
         float2 edgeUV1 = triData.uv1 - triData.uv0;
         float2 edgeUV2 = triData.uv2 - triData.uv0;
         float determinate = edgeUV1.x * edgeUV2.y - edgeUV1.y * edgeUV2.x;
-        // If the determinate is zero then the matrix is non invertable
+        // If the determinate is zero then the matrix is non-invertible
         if (determinate != 0.0f && dot(normalTan, normalTan) > 0.0f)
         {
             determinate = rcp(determinate);
@@ -217,7 +217,7 @@ IntersectData MakeIntersectData_Prev(HitInfo hitData)
         float2 edgeUV1 = triData.uv1 - triData.uv0;
         float2 edgeUV2 = triData.uv2 - triData.uv0;
         float determinate = edgeUV1.x * edgeUV2.y - edgeUV1.y * edgeUV2.x;
-        // If the determinate is zero then the matrix is non invertable
+        // If the determinate is zero then the matrix is non-invertible
         if (determinate != 0.0f && dot(normalTan, normalTan) > 0.0f)
         {
             determinate = rcp(determinate);
@@ -246,7 +246,9 @@ IntersectData MakeIntersectData_Prev(HitInfo hitData)
 
 /**
  * Determine the complete intersection data for a ray hit using visibility buffer information.
- * @param hitData The intersection information for a ray hit.
+ * @param hitData        The intersection information for a ray hit.
+ * @param geometryNormal Surface normal vector at current position.
+ * @param shadingNormal  Shading normal vector at current position.
  * @return The data associated with the intersection.
  */
 IntersectData MakeIntersectData(HitInfo hitData, float3 geometryNormal, float3 shadingNormal)
@@ -256,7 +258,7 @@ IntersectData MakeIntersectData(HitInfo hitData, float3 geometryNormal, float3 s
     float3x4 transform = g_TransformBuffer[instance.transform_index];
 
     // Fetch vertex data
-    TriangleNormUV triData = fetchVerticesNormUV(instance, hitData.primitiveIndex);
+    TriangleUV triData = fetchVerticesUV(instance, hitData.primitiveIndex);
 
     IntersectData iData;
     // Set material

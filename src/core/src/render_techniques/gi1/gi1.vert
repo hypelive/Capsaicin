@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -78,22 +78,41 @@ float3 NormalizeRadiance(float4 radiance)
 
 float4 CellRadiance(uint cell_index)
 {
-    float4 radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index]);
-    return float4(NormalizeRadiance(radiance), float(radiance.w > 0.f));
+    float4 direct = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index]);
+    float4 radiance = float4(direct.rgb / max(direct.w, 1.0f), direct.w);
+#ifdef USE_MULTI_BOUNCE
+    float4 indirect = HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[cell_index]);
+    radiance += float4(indirect.rgb / max(indirect.w, 1.0f), indirect.w);
+#endif
+    return float4(radiance.xyz, float(radiance.w > 0.0f));
 }
 
 float4 CellFilteredRadiance(uint entry_cell_mip0)
 {
-    float4 radiance = HashGridCache_FilteredRadiance(entry_cell_mip0, false);
-    return float4(NormalizeRadiance(radiance), float(radiance.w > 0.f));
+    float4 direct;
+    HashGridCache_FilteredRadianceDirect(entry_cell_mip0, false, direct);
+    float4 radiance = float4(direct.rgb / max(direct.w, 1.0f), direct.w);
+#ifdef USE_MULTI_BOUNCE
+    float4 indirect;
+    HashGridCache_FilteredRadianceIndirect(entry_cell_mip0, false, indirect);
+    radiance += float4(indirect.rgb / max(indirect.w, 1.0f), indirect.w);
+#endif
+    return float4(radiance.xyz, float(radiance.w > 0.0f));
 }
 
 float4 CellFilteringGain(uint entry_cell_mip0)
 {
-    float4 filtered_radiance = HashGridCache_FilteredRadiance(entry_cell_mip0, false);
-    float4 base_radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[entry_cell_mip0]);
-    float3 diff_radiance = max(0.f, NormalizeRadiance(filtered_radiance) - NormalizeRadiance(base_radiance));
-    return float4(diff_radiance, float(filtered_radiance.w > 0.f));
+    float4 filtered_direct_radiance;
+    HashGridCache_FilteredRadianceDirect(entry_cell_mip0, false, filtered_direct_radiance);
+    float4 direct_radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[entry_cell_mip0]);
+    float4 diff_radiance = float4(NormalizeRadiance(filtered_direct_radiance) - NormalizeRadiance(direct_radiance), filtered_direct_radiance.w);
+#ifdef USE_MULTI_BOUNCE
+    float4 filtered_indirect_radiance;
+    HashGridCache_FilteredRadianceIndirect(entry_cell_mip0, false, filtered_indirect_radiance);
+    float4 indirect_radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[entry_cell_mip0]);
+    diff_radiance += float4(NormalizeRadiance(filtered_indirect_radiance) - NormalizeRadiance(indirect_radiance), filtered_indirect_radiance.w);
+#endif
+    return float4(max(0.f, diff_radiance.xyz), float(diff_radiance.w > 0.f));
 }
 
 float4 HeatSampleCount(float4 radiance)
@@ -116,13 +135,25 @@ float4 CellRadianceSampleCount(uint cell_index)
 
 float4 CellFilteredSampleCount(uint entry_cell_mip0)
 {
-    float4 radiance = HashGridCache_FilteredRadiance(entry_cell_mip0, true);
+    float4 radiance;
+    HashGridCache_FilteredRadianceDirect(entry_cell_mip0, true, radiance);
+#ifdef USE_MULTI_BOUNCE
+    float4 indirect_radiance;
+    HashGridCache_FilteredRadianceIndirect(entry_cell_mip0, true, indirect_radiance);
+    radiance += indirect_radiance;
+#endif
     return HeatSampleCount(radiance);
 }
 
 float4 CellFilteredMipLevel(uint entry_cell_mip0)
 {
-    float4 radiance = HashGridCache_FilteredRadiance(entry_cell_mip0, true);
+    float4 radiance;
+    HashGridCache_FilteredRadianceDirect(entry_cell_mip0, true, radiance);
+#ifdef USE_MULTI_BOUNCE
+    float4 indirect_radiance;
+    HashGridCache_FilteredRadianceIndirect(entry_cell_mip0, true, indirect_radiance);
+    radiance += indirect_radiance;
+#endif
     return float4(radiance.xyz, 1.f);
 }
 
@@ -181,7 +212,7 @@ DebugHashGridCells_Params DebugHashGridCells(in uint idx : SV_VertexID)
 
     float4 packed_cell = g_HashGridCache_DebugCellBuffer[debug_cell_index];
     uint   decay_tile  = WrapDecay(g_HashGridCache_DecayTileBuffer[tile_index]);
-    uint   decay_cell  = WrapDecay(g_HashGridCache_DecayCellBuffer[debug_cell_index]);
+    uint   decay_cell  = WrapDecay(g_HashGridCache_DebugDecayCellBuffer[debug_cell_index]);
 
     float cell_size;
     float3 cell_center, direction;

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -257,7 +257,7 @@ void AutoExposure::renderGUI(CapsaicinInternal &capsaicin) const noexcept
 bool AutoExposure::initAutoExposure(CapsaicinInternal const &capsaicin) noexcept
 {
     // Create buffer used to store scene luminance histogram
-    histogramBuffer = gfxCreateBuffer<float>(gfx_, 128 /*required @ 1080p*/);
+    histogramBuffer = gfxCreateBuffer<float>(gfx_, 64);
     histogramBuffer.setName("AutoExposure_Histogram");
     gfxCommandClearBuffer(gfx_, histogramBuffer, glm::floatBitsToUint(0.0F));
 

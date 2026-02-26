@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -66,7 +66,7 @@ float3 evaluateAreaLight(LightArea light, float2 barycentric)
         emissivity *= textureValue.xyz;
 
         // Combine with texture alpha map
-        emissivity *= textureValue.www;
+        emissivity *= textureValue.w;
     }
     return emissivity;
 #else
@@ -96,13 +96,14 @@ float3 evaluateAreaLightAM(LightArea light, float2 barycentric, float3 position,
     float3 lightNormal = normalize(cross(edge1, edge2));
 
     // Determine light direction
-    float3 lightVector = lightPosition - position;
-    float3 lightDirection = normalize(lightVector);
+    float3 lightVector = position - lightPosition;
+    float lightLengthSqr = lengthSqr(lightVector);
+    float3 lightDirection = lightVector * rsqrt(lightLengthSqr);
 
     // Multiply geometry term
     // We support back face triangles so we use abs to handle back face cases
-    weight = lengthSqr(lightVector);
-    weight = (weight != 0.0F) ? saturate(abs(dot(lightNormal, lightDirection))) / weight : 0.0F;
+    float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+    weight = saturate(abs(dot(lightNormal, lightDirection))) * recipLengthSqr;
     emissivity *= weight;
 
     return emissivity;
@@ -184,7 +185,7 @@ float3 evaluateAreaLightCone(LightArea light, float2 barycentric, float3 positio
         emissivity *= textureValue.xyz;
 
         // Combine with texture alpha map
-        emissivity *= textureValue.www;
+        emissivity *= textureValue.w;
     }
     return emissivity;
 #else
@@ -210,7 +211,8 @@ float3 evaluateAreaLightConeAM(LightArea light, float2 barycentric, float3 posit
     float3 lightPosition = interpolate(light.v0.xyz, light.v1.xyz, light.v2.xyz, barycentric);
 
     float3 lightVector = position - lightPosition;
-    float directionLength = length(lightVector);
+    float lightLengthSqr = lengthSqr(lightVector);
+    float directionLength = sqrt(lightLengthSqr);
     float3 lightDirection = lightVector / directionLength;
 
     // Calculate lights surface normal vector
@@ -251,13 +253,13 @@ float3 evaluateAreaLightConeAM(LightArea light, float2 barycentric, float3 posit
         emissivity *= textureValue.xyz;
 
         // Combine with texture alpha map
-        emissivity *= textureValue.www;
+        emissivity *= textureValue.w;
     }
 
     // Multiply geometry term
     // We support back face triangles so we use abs to handle back face cases
-    float weight = lengthSqr(lightVector);
-    weight = (weight != 0.0F) ? saturate(abs(dot(lightNormal, -lightDirection))) / weight : 0.0F;
+    float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+    float weight = saturate(abs(dot(lightNormal, lightDirection))) * recipLengthSqr;
     emissivity *= weight;
 
     return emissivity;
@@ -294,7 +296,7 @@ float3 evaluateEnvironmentLightCone(LightEnvironment light, float3 direction, fl
     // Convert solid angle to percentage of total light surface
     const float ratio = solidAngle * INV_FOUR_PI;
     // Calculate LOD based on total texture pixels and the visible percentage
-    const float lod = log2(ratio) + light.lods;
+    const float lod = log2(ratio) + light.mips;
     return g_EnvironmentBuffer.SampleLevel(g_TextureSampler, direction, lod).xyz;
 #else
     return 0.0f.xxx;
@@ -311,11 +313,10 @@ float3 evaluatePointLight(LightPoint light, float3 position)
 {
 #ifndef DISABLE_DELTA_LIGHTS
     // Calculate the distance between the light and the given point
-    float distance = length(light.position - position);
+    float distSqr = distanceSqr(light.position, position);
     // The returned value is then attenuated by the lights falloff (modified to prevent issues with distance<1)
-    float distMod = distance / light.range;
-    float attenuation = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (distance * distance);
-    return light.intensity * attenuation.xxx;
+    float attenuation = saturate(1.0f - (squared(distSqr) / squared(squared(light.range)))) / (0.0001f + distSqr);
+    return light.intensity * attenuation;
 #else
     return 0.0f.xxx;
 #endif
@@ -332,8 +333,9 @@ float3 evaluateSpotLight(LightSpot light, float3 position)
 #ifndef DISABLE_DELTA_LIGHTS
     // Calculate the distance between the light and the given point
     float3 lightDirectionFull = light.position - position;
-    float distance = length(lightDirectionFull);
-    float3 lightDirection = lightDirectionFull / distance;
+    float distSqr = lengthSqr(lightDirectionFull);
+    float dist = sqrt(distSqr);
+    float3 lightDirection = lightDirectionFull / dist;
     float lightAngle = dot(light.direction, lightDirection);
 
     // Cone attenuation
@@ -343,10 +345,10 @@ float3 evaluateSpotLight(LightSpot light, float3 position)
     angularAttenuation *= angularAttenuation;
 
     // The returned value is then attenuated by the lights falloff (modified to prevent issues with distance<1)
-    float distMod = distance / light.range;
-    float attenuation = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (distance * distance);
+    float distMod = dist / light.range;
+    float attenuation = saturate(1.0f - squared(squared(distMod))) / (0.0001f + distSqr);
     attenuation *= angularAttenuation;
-    return light.intensity * attenuation.xxx;
+    return light.intensity * attenuation;
 #else
     return 0.0f.xxx;
 #endif

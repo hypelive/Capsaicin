@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef RANDOM_HLSL
-#define RANDOM_HLSL
+#ifndef RANDOM_NUMBER_GENERATOR_HLSL
+#define RANDOM_NUMBER_GENERATOR_HLSL
+
+// Requires the following data to be defined in any shader that uses this file
+StructuredBuffer<uint> g_RandomSeedBuffer;
+uint g_RandomSeedBufferSize;
 
 class Random
 {
@@ -83,31 +87,32 @@ class Random
 
 /**
  * Make a new random number generator.
- * @param seed The seed value to use when initliasing the random generator.
+ * @param seed The seed value to use when initialising the random generator.
  * @return The new random number generator.
  */
 Random MakeRandom(uint seed)
 {
     Random ret =
     {
-        seed * 747796405U + 2891336453u
+        g_RandomSeedBuffer[seed % g_RandomSeedBufferSize] * 747796405U + 2891336453u
     };
     return ret;
 }
 
 /**
  * Make a new random number generator.
- * @param seed Seed value to initialise random with (e.g. 1D pixel index).
- * @param frame Temporal seed value to initialise random with (e.g. frame number).
+ * @param seed  Seed value to initialise random with (e.g. 2D pixel index).
+ * @param index Index into the sequence (e.g. frame number).
  * @return The created random number generator.
  */
-Random MakeRandom(uint seed, uint frame)
+Random MakeRandom(uint seed, uint index)
 {
-    const uint inc = (frame << 1) | 1U;
+    const uint inc = (index << 1) | 1U;
     Random ret =
     {
-        (seed + inc) * 747796405U + inc
+        (g_RandomSeedBuffer[seed % g_RandomSeedBufferSize] + inc) * 747796405U + inc
     };
     return ret;
 }
-#endif
+
+#endif // RANDOM_NUMBER_GENERATOR_HLSL

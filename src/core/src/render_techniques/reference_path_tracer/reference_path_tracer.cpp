@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "capsaicin_internal.h"
 #include "components/light_builder/light_builder.h"
 #include "components/light_sampler/light_sampler_switcher.h"
+#include "components/random_number_generator/random_number_generator.h"
 #include "components/stratified_sampler/stratified_sampler.h"
 
 auto const *kReferencePTRaygenShaderName       = "ReferencePTRaygen";
@@ -86,6 +87,7 @@ ComponentList ReferencePT::getComponents() const noexcept
     ComponentList components;
     components.emplace_back(COMPONENT_MAKE(LightSamplerSwitcher));
     components.emplace_back(COMPONENT_MAKE(StratifiedSampler));
+    components.emplace_back(COMPONENT_MAKE(RandomNumberGenerator));
     return components;
 }
 
@@ -113,6 +115,7 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     auto const          lightSampler       = capsaicin.getComponent<LightSamplerSwitcher>();
     auto const          lightBuilder       = capsaicin.getComponent<LightBuilder>();
     auto const          stratified_sampler = capsaicin.getComponent<StratifiedSampler>();
+    auto const          rng                = capsaicin.getComponent<RandomNumberGenerator>();
 
     // Check if options change requires kernel recompile
     bool const recompile = needsRecompile(capsaicin, newOptions);
@@ -163,6 +166,7 @@ void ReferencePT::render(CapsaicinInternal &capsaicin) noexcept
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_Accumulate", accumulate ? 1 : 0);
 
     stratified_sampler->addProgramParameters(capsaicin, reference_pt_program_);
+    rng->addProgramParameters(capsaicin, reference_pt_program_);
 
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
     gfxProgramSetParameter(gfx_, reference_pt_program_, "g_TransformBuffer", capsaicin.getTransformBuffer());
@@ -227,10 +231,10 @@ void ReferencePT::renderGUI(CapsaicinInternal &capsaicin) const noexcept
     ImGui::DragInt("Samples Per Pixel",
         reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("reference_pt_sample_count")), 1, 1, 30);
     auto &bounces = capsaicin.getOption<uint32_t>("reference_pt_bounce_count");
-    ImGui::DragInt("Bounces", reinterpret_cast<int32_t *>(&bounces), 1, 0, 30);
+    ImGui::DragInt("Bounces", reinterpret_cast<int32_t *>(&bounces), 1, 1, 30);
     auto &minBounces = capsaicin.getOption<uint32_t>("reference_pt_min_rr_bounces");
     ImGui::DragInt(
-        "Min Bounces", reinterpret_cast<int32_t *>(&minBounces), 1, 0, static_cast<int32_t>(bounces));
+        "Min Bounces", reinterpret_cast<int32_t *>(&minBounces), 1, 1, static_cast<int32_t>(bounces));
     minBounces = glm::min(minBounces, bounces);
     ImGui::Checkbox(
         "Disable Albedo Textures", &capsaicin.getOption<bool>("reference_pt_disable_albedo_materials"));

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -26,29 +26,28 @@ THE SOFTWARE.
 // Requires the following data to be defined in any shader that uses this file
 StructuredBuffer<uint> g_SeedBuffer;
 StructuredBuffer<uint> g_SobolXorsBuffer;
-
-#include "math/random.hlsl"
+uint g_SeedBufferSize;
 
 namespace NoExport
 {
     /**
      * Generate a random number.
-     * @param index Index into the sequence of value to return.
+     * @param index Index into the sequence of the value to return.
      * @param seed  The random number seed used for creating the sequence.
      * @return The new random number.
      */
     uint randomHash(uint index, uint seed)
     {
         uint state = (index + seed) * 747796405U + seed;
-        state = state * 747796405u + 2891336453u;
-        uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-        word = (word >> 22u) ^ word;
+        state      = state * 747796405u + 2891336453u;
+        uint word  = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+        word       = (word >> 22u) ^ word;
         return word;
     }
 
     /**
      * Generate a number using stochastic sobol sequence.
-     * @param index         Index into the sequence of value to return.
+     * @param index         Index into the sequence of the value to return.
      * @param seed          The random number seed used for creating the sequence.
      * @param dimension     The current dimension of the sequence (0-indexed).
      * @param numDimensions The total number of dimensions that the sequence will be generated over.
@@ -57,20 +56,20 @@ namespace NoExport
     uint stochasticSobol(uint index, uint seed, uint dimension, uint numDimensions)
     {
         // Stochastic Generation of (t,s) Sample Sequences - Helmer
-        uint bits = randomHash(index * numDimensions + dimension, seed);
+        uint bits       = randomHash(index * numDimensions + dimension, seed);
         uint mostSigBit = firstbithigh(index);
         while (index > 0)
         {
             uint nextIndex = index ^ (1U << mostSigBit);
             nextIndex ^= g_SobolXorsBuffer[dimension * 32 + mostSigBit];
             uint nextMostSigBit = firstbithigh(nextIndex);
-            uint randBits = randomHash(nextIndex * numDimensions + dimension, seed);
-            uint bitSet = (mostSigBit - nextMostSigBit);
-            randBits = (randBits >> (32U - bitSet)) ^ 1U;
-            bits = (randBits << (32U - bitSet)) ^ (bits >> bitSet);
+            uint randBits       = randomHash(nextIndex * numDimensions + dimension, seed);
+            uint bitSet         = (mostSigBit - nextMostSigBit);
+            randBits            = (randBits >> (32U - bitSet)) ^ 1U;
+            bits                = (randBits << (32U - bitSet)) ^ (bits >> bitSet);
 
             mostSigBit = nextMostSigBit;
-            index = nextIndex;
+            index      = nextIndex;
         }
         return bits;
     }
@@ -93,8 +92,12 @@ class StratifiedSampler
      */
     uint randInt()
     {
-        dimension = (dimension <= 62) ? dimension + 1 : 0;
-        return NoExport::stochasticSobol(index, seed, dimension, 0);
+        if (dimension >= 64)
+        {
+            dimension = 0;
+            seed = NoExport::randomHash(index, seed);
+        }
+        return NoExport::stochasticSobol(index, seed, dimension++, 64);
     }
 
     /**
@@ -117,12 +120,16 @@ class StratifiedSampler
 
     /**
      * Generate a random number.
-     * @return The new number (range [0->1.0)).
+     * @return The new number (range [0, 1)).
      */
     float rand()
     {
-        dimension = (dimension <= 62) ? dimension : 0;
-        uint val = NoExport::stochasticSobol(index, seed, ++dimension, 64);
+        if (dimension >= 63)
+        {
+            dimension = 0;
+            seed = NoExport::randomHash(index, seed);
+        }
+        uint val = NoExport::stochasticSobol(index, seed, dimension++, 64);
         // Note: Use the upper 24 bits to avoid a bias due to floating point rounding error.
         float ret = (float)(val >> 8) * 0x1.0p-24f;
         return ret;
@@ -130,45 +137,71 @@ class StratifiedSampler
 
     /**
      * Generate 2 random numbers.
-     * @return The new numbers (range [0->1.0)).
+     * @return The new numbers (range [0, 1)).
      */
     float2 rand2()
     {
-        dimension = (dimension <= 61) ? dimension : 0;
+        if (dimension >= 62)
+        {
+            dimension = 0;
+            seed = NoExport::randomHash(index, seed);
+        }
         // Get next Sobol values
-        uint val0 = NoExport::stochasticSobol(index, seed, ++dimension, 64);
-        uint val1 = NoExport::stochasticSobol(index, seed, ++dimension, 64);
+        uint val0 = NoExport::stochasticSobol(index, seed, dimension++, 64);
+        uint val1 = NoExport::stochasticSobol(index, seed, dimension++, 64);
         return float2(val0 >> 8, val1 >> 8) * 0x1.0p-24f.xx;
     }
 
     /**
      * Generate 3 random numbers.
-     * @return The new numbers (range [0->1.0)).
+     * @return The new numbers (range [0, 1)).
      */
     float3 rand3()
     {
-        dimension = (dimension <= 60) ? dimension : 0;
+        if (dimension >= 61)
+        {
+            dimension = 0;
+            seed = NoExport::randomHash(index, seed);
+        }
         // Get next Sobol values
-        uint val0 = NoExport::stochasticSobol(index, seed, ++dimension, 64);
-        uint val1 = NoExport::stochasticSobol(index, seed, ++dimension, 64);
-        uint val2 = NoExport::stochasticSobol(index, seed, ++dimension, 64);
+        uint val0 = NoExport::stochasticSobol(index, seed, dimension++, 64);
+        uint val1 = NoExport::stochasticSobol(index, seed, dimension++, 64);
+        uint val2 = NoExport::stochasticSobol(index, seed, dimension++, 64);
         return float3(val0 >> 8, val1 >> 8, val2 >> 8) * 0x1.0p-24f.xxx;
     }
 };
 
 /**
  * Initialise a stratified sample generator.
- * @param seed Seed value to initialise random with (e.g. 1D pixel index).
- * @param frame Temporal seed value to initialise random with (e.g. frame number).
+ * @param seed      Seed value to initialise random with (e.g. 1D pixel index).
+ * @param index     Index into the sequence (e.g. frame number).
+ * @param dimension (Optional) The dimension of the sequence to start at.
  * @return The new stratified sampler.
  */
-StratifiedSampler MakeStratifiedSampler(uint seed, uint frame)
+StratifiedSampler MakeStratifiedSampler(uint seed, uint index, uint dimension = 0)
 {
     StratifiedSampler ret =
     {
-        frame,
-        g_SeedBuffer[seed],
-        0,
+        index,
+        g_SeedBuffer[seed % g_SeedBufferSize],
+        dimension,
+    };
+    return ret;
+}
+
+/**
+ * Initialise a stratified sample generator by forking an existing one.
+ * @param strat  The dimensional sampler to initialise from.
+ * @param offset (Optional) Offset used to scramble new sequence when multiple forks are being made.
+ * @return The new stratified sampler.
+ */
+StratifiedSampler MakeStratifiedSampler(StratifiedSampler strat, uint offset = 0)
+{
+    StratifiedSampler ret =
+    {
+        strat.index,
+        NoExport::randomHash(strat.index, strat.seed + offset),
+        strat.dimension,
     };
     return ret;
 }
@@ -189,7 +222,7 @@ class StratifiedSampler1D
      */
     uint randInt()
     {
-        return NoExport::stochasticSobol(index++, seed, dimension, 1);
+        return NoExport::stochasticSobol(index++, seed, dimension, 64);
     }
 
     /**
@@ -212,7 +245,7 @@ class StratifiedSampler1D
 
     /**
      * Generate a random number.
-     * @return The new number (range [0->1.0)).
+     * @return The new number (range [0, 1)).
      */
     float rand()
     {
@@ -224,25 +257,27 @@ class StratifiedSampler1D
 
 /**
  * Initialise a 1D sequence stratified sample generator.
- * @param seed Seed value to initialise random with (e.g. 1D pixel index).
+ * @param seed      Seed value to initialise random with.
+ * @param dimension The current dimension of the sequence (0-indexed).
  * @return The 1D new stratified sampler.
  */
-StratifiedSampler1D MakeStratifiedSampler1D(uint seed)
+StratifiedSampler1D MakeStratifiedSampler1D(uint seed, uint dimension = 0)
 {
     StratifiedSampler1D ret =
     {
         0,
-        seed,
-        0,
+        g_SeedBuffer[seed % g_SeedBufferSize],
+        dimension % 64,
     };
+    ret.seed = NoExport::randomHash(dimension / 64, ret.seed);
     return ret;
 }
 
 /**
- * Initialise a 1D sequence stratified sample generator from an dimensional stratified sampler.
+ * Initialise a 1D sequence stratified sample generator from a dimensional stratified sampler.
  * This can be used to branch off from an existing StratifiedSampler and locally generate additional samples
  *  from within the same dimension.
- * @param strat The dimensional sampler to initialise from.
+ * @param strat  The dimensional sampler to initialise from.
  * @param offset (Optional) The number of values expected to be taken with this sampler that is used to offset the start index accordingly.
  * @return The new 1D stratified sampler.
  */
@@ -252,6 +287,23 @@ StratifiedSampler1D MakeStratifiedSampler1D(StratifiedSampler strat, uint offset
     {
         strat.index * offset,
         strat.seed,
+        strat.dimension,
+    };
+    return ret;
+}
+
+/**
+ * Initialise a 1D sequence stratified sample generator by forking an existing one.
+ * @param strat  The sequence sampler to initialise from.
+ * @param offset (Optional) Offset used to scramble new sequence when multiple forks are being made.
+ * @return The new stratified sampler.
+ */
+StratifiedSampler1D MakeStratifiedSampler(StratifiedSampler1D strat, uint offset = 0)
+{
+    StratifiedSampler1D ret =
+    {
+        strat.index,
+        NoExport::randomHash(strat.index, strat.seed + offset),
         strat.dimension,
     };
     return ret;
@@ -269,38 +321,40 @@ class StratifiedSampler2D
 
     /**
      * Generate 2 random numbers.
-     * @return The new numbers (range [0->1.0)).
+     * @return The new numbers (range [0->1)).
      */
     float2 rand2()
     {
         // Get next Sobol values
-        uint val0 = NoExport::stochasticSobol(index, seed, dimension, 2);
-        uint val1 = NoExport::stochasticSobol(index++, seed, dimension + 1, 2);
+        uint val0 = NoExport::stochasticSobol(index++, seed, dimension, 64);
+        uint val1 = NoExport::stochasticSobol(index++, seed, dimension + 1, 64);
         return float2(val0 >> 8, val1 >> 8) * 0x1.0p-24f.xx;
     }
 };
 
 /**
  * Initialise a 2D sequence stratified sample generator.
- * @param seed Seed value to initialise random with (e.g. 1D pixel index).
+ * @param seed      Seed value to initialise random with.
+ * @param dimension The current dimension of the sequence (0-indexed).
  * @return The 2D new stratified sampler.
  */
-StratifiedSampler2D MakeStratifiedSampler2D(uint seed)
+StratifiedSampler2D MakeStratifiedSampler2D(uint seed, uint dimension = 0)
 {
     StratifiedSampler2D ret =
     {
         0,
-        seed,
-        0,
+        g_SeedBuffer[seed % g_SeedBufferSize],
+        dimension % 63,
     };
+    ret.seed = NoExport::randomHash(dimension / 63, ret.seed);
     return ret;
 }
 
 /**
- * Initialise a 2D sequence stratified sample generator from an dimensional stratified sampler.
+ * Initialise a 2D sequence stratified sample generator from a dimensional stratified sampler.
  * This can be used to branch off from an existing StratifiedSampler and locally generate additional samples
  *  from within the same dimension.
- * @param strat The dimensional sampler to initialise from.
+ * @param strat  The dimensional sampler to initialise from.
  * @param offset (Optional) The number of values expected to be taken with this sampler that is used to offset the start index accordingly.
  * @return The new 2D stratified sampler.
  */
@@ -310,6 +364,23 @@ StratifiedSampler2D MakeStratifiedSampler2D(StratifiedSampler strat, uint offset
     {
         strat.index * offset,
         strat.seed,
+        strat.dimension % 63,
+    };
+    return ret;
+}
+
+/**
+ * Initialise a 2D sequence stratified sample generator by forking an existing one.
+ * @param strat  The sequence sampler to initialise from.
+ * @param offset (Optional) Offset used to scramble new sequence when multiple forks are being made.
+ * @return The new stratified sampler.
+ */
+StratifiedSampler2D MakeStratifiedSampler(StratifiedSampler2D strat, uint offset = 0)
+{
+    StratifiedSampler2D ret =
+    {
+        strat.index,
+        NoExport::randomHash(strat.index, strat.seed + offset),
         strat.dimension,
     };
     return ret;

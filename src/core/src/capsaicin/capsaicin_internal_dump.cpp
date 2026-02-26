@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,6 +21,7 @@ THE SOFTWARE.
 ********************************************************************/
 #include "capsaicin_internal.h"
 
+#include <format>
 #include <fstream>
 #include <sstream>
 #include <stb_image_write.h>
@@ -33,33 +34,33 @@ static uint32_t GetBitsPerPixel(const DXGI_FORMAT format) noexcept
 {
     switch (format)
     {
-    case DXGI_FORMAT_R32G32B32A32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32A32_UINT: return 128;
-    case DXGI_FORMAT_R32G32B32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32_UINT: return 96;
-    case DXGI_FORMAT_R16G16B16A16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32_UINT: return 64;
-    case DXGI_FORMAT_R8G8B8A8_UNORM: [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32A32_UINT:   return 128;
+    case DXGI_FORMAT_R32G32B32_FLOAT:     [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32_UINT:      return 96;
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UNORM:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UINT:   [[fallthrough]];
+    case DXGI_FORMAT_R32G32_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_R32G32_UINT:         return 64;
+    case DXGI_FORMAT_R8G8B8A8_UNORM:      [[fallthrough]];
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: [[fallthrough]];
-    case DXGI_FORMAT_R8G8B8A8_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_D32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32_UINT: return 32;
-    case DXGI_FORMAT_R8G8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8G8_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_D16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UINT: return 16;
-    case DXGI_FORMAT_R8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8_UINT: return 8;
-    default: return 0;
+    case DXGI_FORMAT_R8G8B8A8_UINT:       [[fallthrough]];
+    case DXGI_FORMAT_R16G16_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UNORM:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UINT:         [[fallthrough]];
+    case DXGI_FORMAT_D32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_UINT:            return 32;
+    case DXGI_FORMAT_R8G8_UNORM:          [[fallthrough]];
+    case DXGI_FORMAT_R8G8_UINT:           [[fallthrough]];
+    case DXGI_FORMAT_R16_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_D16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UINT:            return 16;
+    case DXGI_FORMAT_R8_UNORM:            [[fallthrough]];
+    case DXGI_FORMAT_R8_UINT:             return 8;
+    default:                              return 0;
     }
 }
 
@@ -67,33 +68,33 @@ static uint32_t GetNumChannels(const DXGI_FORMAT format) noexcept
 {
     switch (format)
     {
-    case DXGI_FORMAT_R32G32B32A32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32A32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8G8B8A8_UNORM: [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32A32_UINT:   [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UNORM:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UINT:   [[fallthrough]];
+    case DXGI_FORMAT_R8G8B8A8_UNORM:      [[fallthrough]];
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: [[fallthrough]];
-    case DXGI_FORMAT_R8G8B8A8_UINT: return 4;
-    case DXGI_FORMAT_R32G32B32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32_UINT: return 3;
-    case DXGI_FORMAT_R32G32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8G8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8G8_UINT: return 2;
-    case DXGI_FORMAT_D32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_D16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8_UINT: return 1;
-    default: return 0;
+    case DXGI_FORMAT_R8G8B8A8_UINT:       return 4;
+    case DXGI_FORMAT_R32G32B32_FLOAT:     [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32_UINT:      return 3;
+    case DXGI_FORMAT_R32G32_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_R32G32_UINT:         [[fallthrough]];
+    case DXGI_FORMAT_R16G16_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UNORM:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UINT:         [[fallthrough]];
+    case DXGI_FORMAT_R8G8_UNORM:          [[fallthrough]];
+    case DXGI_FORMAT_R8G8_UINT:           return 2;
+    case DXGI_FORMAT_D32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_UINT:            [[fallthrough]];
+    case DXGI_FORMAT_R16_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_D16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UINT:            [[fallthrough]];
+    case DXGI_FORMAT_R8_UNORM:            [[fallthrough]];
+    case DXGI_FORMAT_R8_UINT:             return 1;
+    default:                              return 0;
     }
 }
 
@@ -101,33 +102,33 @@ static bool IsFormatFloat(const DXGI_FORMAT format) noexcept
 {
     switch (format)
     {
-    case DXGI_FORMAT_R32G32B32A32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_D32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R32_FLOAT: [[fallthrough]];
-    case DXGI_FORMAT_R16_FLOAT: return true;
-    case DXGI_FORMAT_R32G32B32A32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16B16A16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8G8B8A8_UNORM: [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32A32_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:  [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32_FLOAT:     [[fallthrough]];
+    case DXGI_FORMAT_R32G32_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_FLOAT:        [[fallthrough]];
+    case DXGI_FORMAT_D32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_FLOAT:           [[fallthrough]];
+    case DXGI_FORMAT_R16_FLOAT:           return true;
+    case DXGI_FORMAT_R32G32B32A32_UINT:   [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UNORM:  [[fallthrough]];
+    case DXGI_FORMAT_R16G16B16A16_UINT:   [[fallthrough]];
+    case DXGI_FORMAT_R8G8B8A8_UNORM:      [[fallthrough]];
     case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB: [[fallthrough]];
-    case DXGI_FORMAT_R8G8B8A8_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32B32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R32G32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16G16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8G8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8G8_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R32_UINT: [[fallthrough]];
-    case DXGI_FORMAT_D16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R16_UINT: [[fallthrough]];
-    case DXGI_FORMAT_R8_UNORM: [[fallthrough]];
-    case DXGI_FORMAT_R8_UINT: [[fallthrough]];
-    default: return false;
+    case DXGI_FORMAT_R8G8B8A8_UINT:       [[fallthrough]];
+    case DXGI_FORMAT_R32G32B32_UINT:      [[fallthrough]];
+    case DXGI_FORMAT_R32G32_UINT:         [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UNORM:        [[fallthrough]];
+    case DXGI_FORMAT_R16G16_UINT:         [[fallthrough]];
+    case DXGI_FORMAT_R8G8_UNORM:          [[fallthrough]];
+    case DXGI_FORMAT_R8G8_UINT:           [[fallthrough]];
+    case DXGI_FORMAT_R32_UINT:            [[fallthrough]];
+    case DXGI_FORMAT_D16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UNORM:           [[fallthrough]];
+    case DXGI_FORMAT_R16_UINT:            [[fallthrough]];
+    case DXGI_FORMAT_R8_UNORM:            [[fallthrough]];
+    case DXGI_FORMAT_R8_UINT:             [[fallthrough]];
+    default:                              return false;
     }
 }
 
@@ -174,19 +175,26 @@ void CapsaicinInternal::dumpDebugView(std::filesystem::path const &filePath, std
 {
     if (filePath.has_extension())
     {
-        if (hasSharedTexture(texture))
+        if (texture == "None" || hasSharedTexture(texture))
         {
-            GfxTexture dump_buffer = getSharedTexture(texture);
-            if (texture != "Color" && texture != "ColorScaled")
+            GfxTexture dump_buffer;
+            if (texture == "None")
+            {
+                dump_buffer = !hasSharedTexture("ColorScaled") ? getSharedTexture("Color")
+                                                               : getSharedTexture("ColorScaled");
+            }
+            else if (texture != "Color" && texture != "ColorScaled")
             {
                 // Check extension, with non HDR image writes we want to output the tone-mapped image
                 // instead of the raw AOV data
                 auto extension = filePath.extension().string();
                 std::ranges::transform(extension, extension.begin(), tolower);
-                if (extension == ".jpg" || extension == ".jpeg")
-                {
-                    dump_buffer = currentView;
-                }
+                dump_buffer =
+                    (extension == ".jpg" || extension == ".jpeg") ? currentView : getSharedTexture(texture);
+            }
+            else
+            {
+                dump_buffer = getSharedTexture(texture);
             }
             dumpTexture(filePath, dump_buffer);
         }
@@ -205,8 +213,69 @@ void CapsaicinInternal::dumpCamera(std::filesystem::path const &filePath, bool c
         jittered ? camera_jitter_.y : 0.F, filePath);
 }
 
+std::vector<NodeTimestamps> CapsaicinInternal::getProfiling() noexcept
+{
+    std::vector<NodeTimestamps> timestamps;
+
+    auto getTimestamps = [&timestamps, this](Timeable *timeable) -> void {
+        uint32_t const timestamp_query_count = timeable->getTimestampQueryCount();
+
+        if (!timestamp_query_count)
+        {
+            return; // no profiling info available
+        }
+
+        std::vector<TimeStamp> nodeTimestamps;
+        auto const            &timestamp_queries = timeable->getTimestampQueries();
+        nodeTimestamps.reserve(timestamp_query_count);
+        for (uint32_t i = 0; i < timestamp_query_count; ++i)
+        {
+            nodeTimestamps.emplace_back(
+                timestamp_queries[i].name, gfxTimestampQueryGetDuration(gfx_, timestamp_queries[i].query));
+        }
+        timestamps.emplace_back(timeable->getName(), std::move(nodeTimestamps));
+    };
+    for (auto const &component : components_)
+    {
+        getTimestamps(&*component.second);
+    }
+    for (auto const &render_technique : render_techniques_)
+    {
+        getTimestamps(&*render_technique);
+    }
+    return timestamps;
+}
+
 void CapsaicinInternal::dumpTexture(std::filesystem::path const &filePath, GfxTexture const &texture)
 {
+    // Check if we can actually dump the buffer to the chosen format
+    auto extension = filePath.extension().string();
+    std::ranges::transform(extension, extension.begin(), tolower);
+    if (extension == ".jpg" || extension == ".jpeg")
+    {
+        bool usingHDR = false;
+        if (auto const displayFormat = gfxGetBackBufferFormat(gfx_);
+            displayFormat == DXGI_FORMAT_R16G16B16A16_FLOAT)
+        {
+            // HDR, can only be scRGB
+            usingHDR = true;
+        }
+        else if (displayFormat == DXGI_FORMAT_R10G10B10A2_UNORM)
+        {
+            // Can either be 10bit SDR or HDR10
+            if (auto const colourSpace = gfxGetBackBufferColorSpace(gfx_);
+                colourSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+            {
+                usingHDR = true;
+            }
+        }
+        if (usingHDR)
+        {
+            GFX_PRINTLN("Error: Cannot dump HDR textures to jpeg");
+            return;
+        }
+    }
+
     uint32_t const dumpBufferWidth =
         texture.getWidth() > 0 ? texture.getWidth() : gfxGetBackBufferWidth(gfx_);
     uint32_t const dumpBufferHeight =
@@ -329,7 +398,7 @@ void CapsaicinInternal::saveEXR(GfxBuffer const &dumpBuffer, DXGI_FORMAT bufferF
             case 'G': channelOffset = 1; break;
             case 'B': channelOffset = 2; break;
             case 'A': channelOffset = 3; break;
-            default: assert(false);
+            default:  assert(false);
             }
             auto &imageChannel = image_channels[channel];
             imageChannel.resize(imagePixelCount * sizeof(T));

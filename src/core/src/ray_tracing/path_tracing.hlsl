@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,91 +25,111 @@ THE SOFTWARE.
 
 #include "path_tracing_shared.h"
 
+#include "trace_ray.hlsl"
+#include "intersect_data.hlsl"
+#include "components/light_builder/light_builder.hlsl"
+#include "components/random_number_generator/random_number_generator.hlsl"
 #include "components/stratified_sampler/stratified_sampler.hlsl"
-#include "geometry/intersection.hlsl"
 #include "geometry/mis.hlsl"
-#include "geometry/ray_intersection.hlsl"
+#include "lights/light_sampling.hlsl"
 #include "materials/material_sampling.hlsl"
 #include "math/transform.hlsl"
-#include "math/random.hlsl"
 
 #ifndef USE_INLINE_RT
-#define USE_INLINE_RT 1
+#   define USE_INLINE_RT 1
 #endif
 
 /**
- * The default payload for shading functions is just a standard float3 radiance.
- * However if USE_CUSTOM_HIT_FUNCTIONS is defined by any code including this header then instead
- * the payload will be the user supplied CustomPayLoad struct. It is also expected that if defined the
- * user must also provide shadePathMissCustom, shadePathHitCustom and shadeLightHit functions to
- * be used in place of the defaults.
+ * The default payload for shading functions is just standard float3 radiance.
+ * However, if USE_CUSTOM_HIT_PAYLOAD is defined by any code including this header then instead
+ * the payload will be the user supplied CustomPayLoad struct.
  */
-#ifdef USE_CUSTOM_HIT_FUNCTIONS
+#ifdef USE_CUSTOM_HIT_PAYLOAD
 typedef CustomPayLoad pathPayload;
 #else
 typedef float3 pathPayload;
 #endif
 
-struct ShadowRayPayload
+struct [raypayload] ShadowRayPayload
 {
-    bool visible;
+    bool visible : read(caller) : write(caller, miss);
 };
 
-struct PathData
+struct [raypayload] PathData
 {
-    LightSampler lightSampler;    /**< Sampler used for lighting (essentially just wraps a random number generator) */
-    StratifiedSampler randomStratified; /**< Stratified random number generator instance */
-    float3 throughput;  /**< Accumulated ray throughput for current path segment */
-    pathPayload radiance; /**< Accumulated radiance for the current path segment */
-    float samplePDF;    /**< The PDF of the last sampled BRDF */
-    float3 normal;      /**< The surface normal at the location the current path originated from */
-    uint bounce;        /**< Bounce depth of current path segment */
-    float3 origin;      /**< Return value for new path segment start location */
-    float3 direction;   /**< Return value for new path segment direction */
-    bool terminated;    /**< Return value to indicated current paths terminates */
+    Random randomNG                    : read(closesthit, miss, caller) : write(caller, closesthit, miss); /**< Random number generator */
+    StratifiedSampler randomStratified : read(closesthit, caller)       : write(caller, closesthit); /**< Stratified random number generator instance */
+    float3 throughput                  : read(closesthit, miss, caller) : write(caller, closesthit); /**< Accumulated ray throughput for current path segment */
+    pathPayload radiance               : read(closesthit, miss, caller) : write(caller, closesthit, miss); /**< Accumulated radiance for the current path segment */
+    float samplePDF                    : read(closesthit, miss, caller) : write(caller, closesthit); /**< The PDF of the last sampled BRDF */
+    float3 normal                      : read(closesthit, miss, caller) : write(caller, closesthit); /**< The surface normal at the location the current path originated from */
+    uint bounce                        : read(closesthit, miss, caller) : write(caller);     /**< Bounce depth of current path segment */
+    float3 origin                      : read(caller)                   : write(closesthit); /**< Return value for new path segment start location */
+    float3 direction                   : read(caller)                   : write(closesthit); /**< Return value for new path segment direction */
+    bool terminated                    : read(caller)                   : write(closesthit, miss); /**< Return value to indicated current paths terminates */
 };
+
+/**
+ * Add new radiance to the existing radiance.
+ * @param [in,out] radiance The existing radiance.
+ * @param newRadiance       The new radiance to add.
+ * @param bounce            The current bounce depth.
+ */
+void addRadiance(inout float3 radiance, float3 newRadiance, uint bounce)
+{
+    radiance += newRadiance;
+}
+
+/**
+ * Set the hit distance for a shaded path hit.
+ * @param [in,out] radiance The existing radiance.
+ * @param rayOrigin         The origin of the ray.
+ * @param position          The position of the surface the ray hit.
+ */
+void addHitDistance(inout float3 radiance, float3 rayOrigin, float3 position)
+{
+    // Nothing to do
+}
 
 /**
  * Calculate any radiance from a missed path segment.
  * @param ray               The traced ray that missed any surfaces.
  * @param currentBounce     The current number of bounces along path for current segment.
- * @param lightSampler      Light sampler.
+ * @param randomNG          Random number generator.
  * @param normal            Shading normal vector at start of path segment.
  * @param samplePDF         The PDF of sampling the current paths direction.
  * @param throughput        The current paths combined throughput.
  * @param [in,out] radiance The combined radiance. Any new radiance is added to the existing value and returned.
  */
-void shadePathMiss(RayDesc ray, uint currentBounce, inout LightSampler lightSampler, float3 normal, float samplePDF,
-    float3 throughput, inout float3 radiance)
+template<typename RadianceT>
+void shadePathMiss(RayInfo ray, uint currentBounce, inout Random randomNG, float3 normal, float samplePDF,
+    float3 throughput, inout RadianceT radiance)
 {
 #if !defined(DISABLE_NON_NEE) && !defined(DISABLE_ENVIRONMENT_LIGHTS)
-#   ifdef DISABLE_DIRECT_LIGHTING
+#   if defined(DISABLE_DIRECT_LIGHTING)
     if (currentBounce == 1) return;
-#   endif // DISABLE_DIRECT_LIGHTING
+#   endif
     if (hasEnvironmentLight())
     {
         // If nothing was hit then load the environment map
         LightEnvironment light = getEnvironmentLight();
-        float3 lightRadiance = evaluateEnvironmentLight(light, ray.Direction);
+        float3 lightRadiance = evaluateEnvironmentLight(light, ray.direction);
+#   if !defined(DISABLE_NEE)
         if (currentBounce != 0)
         {
-            // Add lighting contribution
-#   ifndef DISABLE_NEE
             // Account for light contribution along sampled direction
-            float lightPDF = sampleEnvironmentLightPDF(light, ray.Direction, normal);
-            lightPDF *= lightSampler.sampleLightPDF(0, ray.Origin, normal);
+            float lightPDF = sampleEnvironmentLightPDF(light, ray.direction, normal);
+            lightPDF *= sampleLightsPDF(randomNG, 0, ray.origin, normal);
             if (lightPDF != 0.0f)
             {
                 float weight = heuristicMIS(samplePDF, lightPDF);
-                radiance += throughput * lightRadiance * weight.xxx;
+                addRadiance(radiance, throughput * lightRadiance * weight, currentBounce);
             }
-#   else  // !DISABLE_NON_NEE
-            radiance += throughput * lightRadiance;
-#   endif // !DISABLE_NON_NEE
         }
         else
+#   endif // !DISABLE_NON_NEE
         {
-            radiance += throughput * lightRadiance;
+            addRadiance(radiance, throughput * lightRadiance, currentBounce);
         }
     }
 #endif // !DISABLE_NON_NEE && !DISABLE_ENVIRONMENT_LIGHTS
@@ -120,21 +140,25 @@ void shadePathMiss(RayDesc ray, uint currentBounce, inout LightSampler lightSamp
  * @param ray               The traced ray that hit a surface.
  * @param hitData           Data associated with the hit surface.
  * @param iData             Retrieved data associated with the hit surface.
- * @param lightSampler      Light sampler.
+ * @param randomNG          Random number generator.
  * @param currentBounce     The current number of bounces along path for current segment.
  * @param normal            Shading normal vector at start of path segment (Only valid if bounce > 0).
  * @param samplePDF         The PDF of sampling the current paths direction.
  * @param throughput        The current paths combined throughput.
  * @param [in,out] radiance The combined radiance. Any new radiance is added to the existing value and returned.
  */
-void shadePathHit(RayDesc ray, HitInfo hitData, IntersectData iData, inout LightSampler lightSampler,
-    uint currentBounce, float3 normal, float samplePDF, float3 throughput, inout float3 radiance)
+template<typename RadianceT>
+void shadePathHit(RayInfo ray, HitInfo hitData, IntersectData iData, inout Random randomNG,
+    uint currentBounce, float3 normal, float samplePDF, float3 throughput, inout RadianceT radiance)
 {
+    if (currentBounce == 1)
+    {
+        addHitDistance(radiance, ray.origin, iData.position);
+#if defined(DISABLE_DIRECT_LIGHTING)
+        return;
+#endif
+    }
 #if !defined(DISABLE_NON_NEE) && !defined(DISABLE_AREA_LIGHTS)
-#   ifdef DISABLE_DIRECT_LIGHTING
-    if (currentBounce == 1) {/*ignore emissive hit*/} else {
-#   endif // DISABLE_DIRECT_LIGHTING
-
     // Get material emissive values
     if (any(iData.material.emissivity.xyz > 0.0f))
     {
@@ -144,29 +168,24 @@ void shadePathHit(RayDesc ray, HitInfo hitData, IntersectData iData, inout Light
         LightArea emissiveLight = MakeLightArea(iData.vertex0, iData.vertex1, iData.vertex2,
             areaEmissivity, iData.uv, iData.uv, iData.uv);
         float3 lightRadiance = evaluateAreaLight(emissiveLight, 0.0f.xx/*Use bogus barycentrics as correct UV is already stored*/);
+#   if !defined(DISABLE_NEE)
         if (currentBounce != 0)
         {
             // Account for light contribution along sampled direction
-#   ifndef DISABLE_NEE
-            float lightPDF = sampleAreaLightPDF(emissiveLight, ray.Origin, iData.position);
-            lightPDF *= lightSampler.sampleLightPDF(getAreaLightIndex(hitData.instanceIndex, hitData.primitiveIndex), ray.Origin, normal);
+            float lightPDF = sampleAreaLightPDF(emissiveLight, ray.origin, iData.position);
+            lightPDF *= sampleLightsPDF(randomNG, getAreaLightIndex(hitData.instanceIndex, hitData.primitiveIndex), ray.origin, normal);
             if (lightPDF != 0.0f)
             {
                 float weight = heuristicMIS(samplePDF, lightPDF);
-                radiance += throughput * lightRadiance * weight.xxx;
+                addRadiance(radiance, throughput * lightRadiance * weight, currentBounce);
             }
-#else  // !DISABLE_NON_NEE
-            radiance += throughput * lightRadiance;
-#endif // !DISABLE_NON_NEE
         }
         else
+#   endif // !DISABLE_NON_NEE
         {
-            radiance += throughput * lightRadiance;
+            addRadiance(radiance, throughput * lightRadiance, currentBounce);
         }
     }
-#   ifdef DISABLE_DIRECT_LIGHTING
-    }
-#   endif // DISABLE_DIRECT_LIGHTING
 #endif // !DISABLE_NON_NEE && !DISABLE_AREA_LIGHTS
 }
 
@@ -174,6 +193,7 @@ void shadePathHit(RayDesc ray, HitInfo hitData, IntersectData iData, inout Light
  * Calculate any radiance from a hit light.
  * @param ray               The traced ray that hit a surface.
  * @param material          Material data describing BRDF of surface.
+ * @param currentBounce     The current number of bounces along path for current segment.
  * @param normal            Shading normal vector at current position.
  * @param viewDirection     Outgoing ray view direction.
  * @param throughput        The current paths combined throughput.
@@ -182,45 +202,53 @@ void shadePathHit(RayDesc ray, HitInfo hitData, IntersectData iData, inout Light
  * @param selectedLight     The light that was selected for sampling.
  * @param [in,out] radiance The combined radiance. Any new radiance is added to the existing value and returned.
  */
-void shadeLightHit(RayDesc ray, MaterialBRDF material, float3 normal, float3 viewDirection, float3 throughput,
-    float lightPDF, float3 radianceLi, Light selectedLight, inout float3 radiance)
+template<typename RadianceT>
+void shadeLightHit(RayInfo ray, MaterialBRDF material, uint currentBounce, float3 normal, float3 viewDirection, float3 throughput,
+    float lightPDF, float3 radianceLi, Light selectedLight, inout RadianceT radiance)
 {
-#ifdef DISABLE_NON_NEE
-    float3 sampleReflectance = evaluateBRDF(material, normal, viewDirection, ray.Direction);
-    radiance += throughput * sampleReflectance * radianceLi / lightPDF.xxx;
+#if defined(DISABLE_NON_NEE) || (defined(DISABLE_AREA_LIGHTS) && defined(DISABLE_ENVIRONMENT_LIGHTS))
+    float3 sampleReflectance = evaluateBRDF(material, normal, viewDirection, ray.direction);
+    addRadiance(radiance, throughput * sampleReflectance * radianceLi / lightPDF, currentBounce);
 #else
-    // Evaluate BRDF for new light direction and calculate combined PDF for current sample
+    // Evaluate BRDF for new light direction and calculate PDF for current sample
     float3 sampleReflectance;
-    float samplePDF = sampleBRDFPDFAndEvalute(material, normal, viewDirection, ray.Direction, sampleReflectance);
+    float samplePDF = sampleBRDFPDFAndEvalute(material, normal, viewDirection, ray.direction, sampleReflectance);
     if (samplePDF != 0.0f)
     {
         bool deltaLight = isDeltaLight(selectedLight);
         float weight = (!deltaLight) ? heuristicMIS(lightPDF, samplePDF) : 1.0f;
-        radiance += throughput * sampleReflectance * radianceLi * (weight / lightPDF).xxx;
+        addRadiance(radiance, throughput * sampleReflectance * radianceLi * (weight / lightPDF), currentBounce);
     }
 #endif // DISABLE_NON_NEE
 }
 
+#ifdef USE_CUSTOM_HIT_FUNCTIONS
+#   define shadePathMissFunc shadePathMissCustom
+#   define shadeLightHitFunc shadeLightHitCustom
+#   define shadePathHitFunc shadePathHitCustom
+#else
+#   define shadePathMissFunc shadePathMiss
+#   define shadeLightHitFunc shadeLightHit
+#   define shadePathHitFunc shadePathHit
+#endif
+
 /**
  * Calculates a new light ray direction from a surface by sampling the scenes lighting.
- * @tparam RNG The type of random number sampler to be used.
- * @param material            Material data describing BRDF of surface.
- * @param randomStratified    Random number sampler used to sample light.
- * @param lightSampler        Light sampler.
+ * @param randomStratified    Random number sampler used to sample light surface.
+ * @param randomNG            Random number generator.
  * @param position            Current position on surface.
  * @param normal              Shading normal vector at current position.
  * @param geometryNormal      Surface normal vector at current position.
- * @param viewDirection       Outgoing ray view direction.
  * @param [out] ray           The ray containing the new light ray parameters (may not be normalised).
  * @param [out] lightPDF      The PDF of sampling the returned light direction.
  * @param [out] radianceLi    The radiance visible along sampled light.
  * @param [out] selectedLight The light that was selected for sampling.
  * @return True if light path was generated, False if no ray returned.
  */
-bool sampleLightsNEEDirection(MaterialBRDF material, inout StratifiedSampler randomStratified, LightSampler lightSampler,
-    float3 position, float3 normal, float3 geometryNormal, float3 viewDirection, out RayDesc ray, out float lightPDF, out float3 radianceLi, out Light selectedLight)
+bool sampleLightsNEEDirection(inout StratifiedSampler randomStratified, inout Random randomNG, float3 position,
+    float3 normal, float3 geometryNormal, out RayInfo ray, out float lightPDF, out float3 radianceLi, out Light selectedLight)
 {
-    uint lightIndex = lightSampler.sampleLights(position, normal, lightPDF);
+    uint lightIndex = sampleLights(randomNG, position, normal, lightPDF);
     if (lightPDF == 0.0f)
     {
         return false;
@@ -244,19 +272,16 @@ bool sampleLightsNEEDirection(MaterialBRDF material, inout StratifiedSampler ran
     }
 
     // Create shadow ray
-    ray.Origin = offsetPosition(position, geometryNormal);
-    ray.Direction = hasLightPosition(selectedLight) ? lightPosition - ray.Origin : lightDirection;
-    ray.TMin = 0.0f;
-    ray.TMax = hasLightPosition(selectedLight) ? 1.0f - SHADOW_RAY_EPSILON : FLT_MAX;
+    ray = MakeRayInfoShadow(position, geometryNormal, lightPosition, lightDirection, selectedLight);
     return true;
 }
 
 /**
  * Calculates radiance from a new light ray direction from a surface by sampling the scenes lighting.
- * @tparam RNG The type of random number sampler to be used.
  * @param material          Material data describing BRDF of surface.
  * @param randomStratified  Random number sampler used to sample light.
- * @param lightSampler      Light sampler.
+ * @param randomNG          Random number generator.
+ * @param currentBounce     The current number of bounces along path for current segment.
  * @param position          Current position on surface.
  * @param normal            Shading normal vector at current position.
  * @param geometryNormal    Surface normal vector at current position.
@@ -264,68 +289,67 @@ bool sampleLightsNEEDirection(MaterialBRDF material, inout StratifiedSampler ran
  * @param throughput        The current paths combined throughput.
  * @param [in,out] radiance The combined radiance. Any new radiance is added to the existing value and returned.
  */
-void sampleLightsNEE(MaterialBRDF material, inout StratifiedSampler randomStratified, LightSampler lightSampler,
-    float3 position, float3 normal, float3 geometryNormal, float3 viewDirection, float3 throughput, inout pathPayload radiance)
+template<typename RadianceT>
+void sampleLightsNEE(MaterialBRDF material, inout StratifiedSampler randomStratified, inout Random randomNG, uint currentBounce,
+    float3 position, float3 normal, float3 geometryNormal, float3 viewDirection, float3 throughput, inout RadianceT radiance)
 {
+#if !defined(DISABLE_NEE)
     // Get sampled light direction
     float lightPDF;
-    RayDesc ray;
+    RayInfo ray;
     float3 radianceLi;
     Light selectedLight;
-    if (!sampleLightsNEEDirection(material, randomStratified, lightSampler, position, normal, geometryNormal, viewDirection, ray, lightPDF, radianceLi, selectedLight))
+    if (!sampleLightsNEEDirection(randomStratified, randomNG, position, normal, geometryNormal, ray, lightPDF, radianceLi, selectedLight))
     {
         return;
     }
 
     // Trace shadow ray
-#if USE_INLINE_RT
+#   if USE_INLINE_RT
     ShadowRayQuery rayShadowQuery = TraceRay<ShadowRayQuery>(ray);
-    bool hit = rayShadowQuery.CommittedStatus() == COMMITTED_NOTHING;
-#else
+    bool visible = rayShadowQuery.CommittedStatus() == COMMITTED_NOTHING;
+#   else
     ShadowRayPayload payload = {false};
-    TraceRay(g_Scene, SHADOW_RAY_FLAGS, 0xFFu, 1, 0, 1, ray, payload);
-    bool hit = payload.visible;
-#endif
+    TraceRayShadow(ray, payload);
+    bool visible = payload.visible;
+#   endif
 
     // If nothing was hit then we have hit the light
-    if (hit)
+    if (visible)
     {
         // Normalise ray direction
-        ray.Direction = normalize(ray.Direction);
-        ray.TMax = FLT_MAX;
+        ray.direction = normalize(ray.direction);
+        ray.range.y = FLT_MAX;
 
         // Add lighting contribution
-#ifdef USE_CUSTOM_HIT_FUNCTIONS
-        shadeLightHitCustom(ray, material, normal, viewDirection, throughput, lightPDF, radianceLi, selectedLight, radiance);
-#else
-        shadeLightHit(ray, material, normal, viewDirection, throughput, lightPDF, radianceLi, selectedLight, radiance);
-#endif
+        shadeLightHitFunc(ray, material, currentBounce, normal, viewDirection, throughput, lightPDF, radianceLi, selectedLight, radiance);
     }
+#endif // DISABLE_NEE
 }
 
 /**
  * Calculate the next segment along a path after a valid surface hit.
  * @param materialBRDF        The material on the hit surface.
  * @param randomStratified    Random number sampler used for sampling.
- * @param lightSampler        Light sampler.
- * @param currentBounce       The current number of bounces along path for current segment.
- * @param minBounces          The minimum number of allowed bounces along path segment before termination.
- * @param maxBounces          The maximum number of allowed bounces along path segment.
+ * @param position            Current position on surface.
  * @param normal              Shading normal vector at current position.
  * @param geometryNormal      Surface normal vector at current position.
  * @param viewDirection       Outgoing ray view direction.
+ * @param [in,out] radiance   The radiance payload.
  * @param [in,out] throughput Combined throughput for current path.
- * @param [out] rayDirection  New outgoing path segment direction.
+ * @param [out] ray           New outgoing path segment.
  * @param [out] samplePDF     The PDF of sampling the new paths direction.
  * @return True if path has new segment, False if path should be terminated.
  */
+template<typename RadianceT>
 bool pathNext(MaterialBRDF materialBRDF, inout StratifiedSampler randomStratified,
-    inout LightSampler lightSampler, uint currentBounce, uint minBounces, uint maxBounces, float3 normal,
-    float3 geometryNormal, float3 viewDirection, inout float3 throughput, out float3 rayDirection, out float samplePDF)
+    float3 position, float3 normal, float3 geometryNormal, float3 viewDirection, inout RadianceT radiance,
+    inout float3 throughput, out RayInfo ray, out float samplePDF)
 {
     // Sample BRDF to get next ray direction
     float3 sampleReflectance;
-    rayDirection = sampleBRDF(materialBRDF, randomStratified, normal, viewDirection, sampleReflectance, samplePDF);
+    samplePDF = 0.0F;
+    float3 rayDirection = sampleBRDFAndEvaluate(materialBRDF, randomStratified, normal, viewDirection, sampleReflectance, samplePDF);
 
     // Prevent tracing directions below the surface
     if (dot(geometryNormal, rayDirection) <= 0.0f || samplePDF == 0.0f)
@@ -334,55 +358,51 @@ bool pathNext(MaterialBRDF materialBRDF, inout StratifiedSampler randomStratifie
     }
 
     // Add sampling weight to current weight
-    throughput *= sampleReflectance / samplePDF.xxx;
+    throughput *= sampleReflectance / samplePDF;
 
-    // Russian Roulette early termination
-    if (currentBounce > minBounces)
-    {
-        float rrSample = hmax(throughput);
-        if (rrSample <= lightSampler.randomNG.rand())
-        {
-            return false;
-        }
-        throughput /= rrSample.xxx;
-    }
+    // Update path information
+    ray = MakeRayInfoClosest(position, geometryNormal, rayDirection);
+
     return true;
 }
 
+#ifdef USE_CUSTOM_PATH_NEXT
+#   define pathNextFunc pathNextCustom
+#else
+#   define pathNextFunc pathNext
+#endif
+
 /**
  * Handle case when a traced ray hits a surface.
- * @param ray                 The traced ray that hit a surface.
+ * @param [in,out] ray        The traced ray that hit a surface (returns ray for next path segment).
  * @param hitData             Data associated with the hit surface.
  * @param iData               Retrieved data associated with the hit surface.
  * @param randomStratified    Random number sampler used for sampling.
- * @param lightSampler        Light sampler.
+ * @param randomNG            Random number generator.
  * @param currentBounce       The current number of bounces along path for current segment.
  * @param minBounces          The minimum number of allowed bounces along path segment before termination.
  * @param maxBounces          The maximum number of allowed bounces along path segment.
  * @param [in,out] normal     Shading normal vector at path segments origin (returns shading normal at current position).
  * @param [in,out] samplePDF  The PDF of sampling the current path segments direction (returns the PDF of sampling the new paths direction).
  * @param [in,out] throughput Combined throughput for current path.
- * @param [in,out] radiance      The visible radiance contribution of the path hit.
+ * @param [in,out] radiance   The visible radiance contribution of the path hit.
  * @return True if path has new segment, False if path should be terminated.
  */
-bool pathHit(inout RayDesc ray, HitInfo hitData, IntersectData iData, inout StratifiedSampler randomStratified,
-    inout LightSampler lightSampler, uint currentBounce, uint minBounces, uint maxBounces, inout float3 normal,
-    inout float samplePDF, inout float3 throughput, inout pathPayload radiance)
+template<typename RadianceT>
+bool pathHit(inout RayInfo ray, HitInfo hitData, IntersectData iData, inout StratifiedSampler randomStratified,
+    inout Random randomNG, uint currentBounce, uint minBounces, uint maxBounces, inout float3 normal,
+    inout float samplePDF, inout float3 throughput, inout RadianceT radiance)
 {
     // Shade current position
-#ifdef USE_CUSTOM_HIT_FUNCTIONS
-    shadePathHitCustom(ray, hitData, iData, lightSampler, currentBounce, normal, samplePDF, throughput, radiance);
-#else
-    shadePathHit(ray, hitData, iData, lightSampler, currentBounce, normal, samplePDF, throughput, radiance);
-#endif
+    shadePathHitFunc(ray, hitData, iData, randomNG, currentBounce, normal, samplePDF, throughput, radiance);
 
     // Terminate early if no more bounces
-    if (currentBounce == maxBounces)
+    if (currentBounce >= maxBounces)
     {
         return false;
     }
 
-    float3 viewDirection = -ray.Direction;
+    float3 viewDirection = -ray.direction;
     // Stop if surface normal places ray behind surface (note surface normal != geometric normal)
     //  Currently disabled due to incorrect normals generated by normal mapping when not using displacement/parallax
     //if (dot(iData.normal, viewDirection) <= 0.0f)
@@ -391,48 +411,61 @@ bool pathHit(inout RayDesc ray, HitInfo hitData, IntersectData iData, inout Stra
     //}
 
     MaterialBRDF materialBRDF = MakeMaterialBRDF(iData.material, iData.uv);
-#ifdef DISABLE_ALBEDO_MATERIAL
+#if defined(DISABLE_ALBEDO_MATERIAL)
     // Disable material albedo if requested
     if (currentBounce == 0)
     {
         materialBRDF.albedo = 0.3f.xxx;
-#   ifndef DISABLE_SPECULAR_MATERIALS
+#   if !defined(DISABLE_SPECULAR_MATERIALS)
         materialBRDF.F0 = 0.0f.xxx;
 #   endif // !DISABLE_SPECULAR_MATERIALS
     }
 #endif // DISABLE_ALBEDO_MATERIAL
 
-#ifndef DISABLE_NEE
-#   ifdef DISABLE_DIRECT_LIGHTING
+#if !defined(DISABLE_NEE)
+#   if defined(DISABLE_DIRECT_LIGHTING)
     // Disable direct lighting if requested
     if (currentBounce > 0)
 #   endif // DISABLE_DIRECT_LIGHTING
     {
         // Sample a single light
-        sampleLightsNEE(materialBRDF, randomStratified, lightSampler, iData.position,
+        sampleLightsNEE(materialBRDF, randomStratified, randomNG, currentBounce, iData.position,
             iData.normal, iData.geometryNormal, viewDirection, throughput, radiance);
     }
 #endif // DISABLE_NEE
 
-    // Sample BRDF to get next ray direction
-    float3 rayDirection;
-    bool ret = pathNext(materialBRDF, randomStratified, lightSampler, currentBounce, minBounces, maxBounces,
-        iData.normal, iData.geometryNormal, viewDirection, throughput, rayDirection, samplePDF);
-
-    // Update path information
-    ray.Origin = offsetPosition(iData.position, iData.geometryNormal);
-    ray.Direction = rayDirection;
-    ray.TMin = 0.0f;
-    ray.TMax = FLT_MAX;
+#if defined(DISABLE_NON_NEE) && (defined(DISABLE_AREA_LIGHTS) && defined(DISABLE_ENVIRONMENT_LIGHTS))
+    return false;
+#else
     normal = iData.normal;
-    return ret;
+    // Sample to get next ray direction
+    if (!pathNextFunc(materialBRDF, randomStratified, iData.position, normal, iData.geometryNormal,
+        viewDirection, radiance, throughput, ray, samplePDF))
+    {
+        // Terminate path if no new segment
+        return false;
+    }
+
+    // Russian Roulette early termination
+    if (currentBounce > minBounces)
+    {
+        float rrSample = hmax(throughput);
+        if (rrSample <= randomNG.rand())
+        {
+            return false;
+        }
+        throughput /= rrSample;
+    }
+
+    return true;
+#endif
 }
 
 /**
  * Trace a new path.
  * @param ray               The ray for the first path segment.
  * @param randomStratified  Random number sampler used for sampling.
- * @param lightSampler      Light sampler.
+ * @param randomNG          Random number generator.
  * @param currentBounce     The current number of bounces along path for current segment.
  * @param minBounces        The minimum number of allowed bounces along path segment before termination.
  * @param maxBounces        The maximum number of allowed bounces along path segment.
@@ -440,8 +473,9 @@ bool pathHit(inout RayDesc ray, HitInfo hitData, IntersectData iData, inout Stra
  * @param throughput        Initial combined throughput for current path.
  * @param [in,out] radiance The visible radiance contribution of the path hit.
  */
-void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout LightSampler lightSampler,
-    uint currentBounce, uint minBounces, uint maxBounces, float3 normal, float3 throughput, inout pathPayload radiance)
+template<typename RadianceT>
+void tracePath(RayInfo ray, inout StratifiedSampler randomStratified, inout Random randomNG,
+    uint currentBounce, uint minBounces, uint maxBounces, float3 normal, float3 throughput, inout RadianceT radiance)
 {
     // Initialise per-sample path tracing values
 #if USE_INLINE_RT
@@ -452,7 +486,7 @@ void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout Ligh
     pathData.throughput = throughput;
     pathData.samplePDF = 1.0f;
     pathData.terminated = false;
-    pathData.lightSampler = lightSampler;
+    pathData.randomNG = randomNG;
     pathData.randomStratified = randomStratified;
 #endif
 
@@ -465,11 +499,7 @@ void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout Ligh
         // Check for valid intersection
         if (rayQuery.CommittedStatus() == COMMITTED_NOTHING)
         {
-#   ifdef USE_CUSTOM_HIT_FUNCTIONS
-            shadePathMissCustom(ray, bounce, lightSampler, normal, samplePDF, throughput, radiance);
-#   else
-            shadePathMiss(ray, bounce, lightSampler, normal, samplePDF, throughput, radiance);
-#   endif
+            shadePathMissFunc(ray, bounce, randomNG, normal, samplePDF, throughput, radiance);
             break;
         }
         else
@@ -477,7 +507,7 @@ void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout Ligh
             // Get the intersection data
             HitInfo hitData = GetHitInfoRtInlineCommitted(rayQuery);
             IntersectData iData = MakeIntersectData(hitData);
-            if (!pathHit(ray, hitData, iData, randomStratified, lightSampler,
+            if (!pathHit(ray, hitData, iData, randomStratified, randomNG,
                 bounce, minBounces, maxBounces, normal, samplePDF, throughput, radiance))
             {
                 break;
@@ -485,12 +515,11 @@ void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout Ligh
         }
 #else
         pathData.bounce = bounce;
-        TraceRay(g_Scene, CLOSEST_RAY_FLAGS, 0xFFu, 0, 0, 0, ray, pathData);
+        TraceRayClosest(ray, pathData);
         // Create new ray
-        ray.Origin = pathData.origin;
-        ray.Direction = pathData.direction;
-        ray.TMin = 0.0f;
-        ray.TMax = FLT_MAX;
+        ray.origin = pathData.origin;
+        ray.direction = pathData.direction;
+        ray.range = float2(0.0f, FLT_MAX);
 
         if (pathData.terminated)
         {
@@ -508,15 +537,16 @@ void tracePath(RayDesc ray, inout StratifiedSampler randomStratified, inout Ligh
  * Trace a new path from beginning.
  * @param ray               The ray for the first path segment.
  * @param randomStratified  Random number sampler used for sampling.
- * @param lightSampler      Light sampler.
+ * @param randomNG          Random number generator.
  * @param minBounces        The minimum number of allowed bounces along path segment before termination.
  * @param maxBounces        The maximum number of allowed bounces along path segment.
  * @param [in,out] radiance The visible radiance contribution of the path hit.
  */
-void traceFullPath(RayDesc ray, inout StratifiedSampler randomStratified, inout LightSampler lightSampler,
-    uint minBounces, uint maxBounces, inout pathPayload radiance)
+template<typename RadianceT>
+void traceFullPath(RayInfo ray, inout StratifiedSampler randomStratified, inout Random randomNG,
+    uint minBounces, uint maxBounces, inout RadianceT radiance)
 {
-    tracePath(ray, randomStratified, lightSampler, 0, minBounces, maxBounces, 0.0f.xxx, 1.0f.xxx, radiance);
+    tracePath(ray, randomStratified, randomNG, 0, minBounces, maxBounces, 0.0f.xxx, 1.0f.xxx, radiance);
 }
 
 #endif // PATH_TRACING_HLSL

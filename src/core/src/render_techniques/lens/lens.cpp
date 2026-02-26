@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -65,8 +65,10 @@ Lens::RenderOptions Lens::convertOptions(RenderOptionList const &options) noexce
 SharedTextureList Lens::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
-    textures.push_back({"ColorScaled", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Optional});
+    textures.push_back({.name = "Color", .access = SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "ColorScaled",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::OptionalDiscard});
     return textures;
 }
 
@@ -76,6 +78,7 @@ bool Lens::init(CapsaicinInternal const &capsaicin) noexcept
     grainSeed = 0;
     grainTime = 0.0;
 
+    options = convertOptions(capsaicin.getOptions());
     if (options.lens_chromatic_enable || options.lens_vignette_enable || options.lens_film_grain_enable)
     {
         // Create kernels
@@ -97,10 +100,8 @@ void Lens::render(CapsaicinInternal &capsaicin) noexcept
         {
             // Destroy resources when not being used
             terminate();
-            options.lens_chromatic_enable  = false;
-            options.lens_vignette_enable   = false;
-            options.lens_film_grain_enable = false;
         }
+        options = newOptions;
         return;
     }
 
@@ -249,9 +250,9 @@ bool Lens::initLens(CapsaicinInternal const &capsaicin) noexcept
                                   && capsaicin.getOption<bool>("taa_enable");
             chromaticAberrationTexture = usesScaling
                                            ? capsaicin.createWindowTexture(
-                                               DXGI_FORMAT_R16G16B16A16_FLOAT, "Lens_ChromaticAberration")
+                                                 DXGI_FORMAT_R16G16B16A16_FLOAT, "Lens_ChromaticAberration")
                                            : capsaicin.createRenderTexture(
-                                               DXGI_FORMAT_R16G16B16A16_FLOAT, "Lens_ChromaticAberration");
+                                                 DXGI_FORMAT_R16G16B16A16_FLOAT, "Lens_ChromaticAberration");
         }
     }
     else

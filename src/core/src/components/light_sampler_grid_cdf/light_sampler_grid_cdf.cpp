@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,8 +22,9 @@ THE SOFTWARE.
 
 #include "light_sampler_grid_cdf.h"
 
-#include "../light_builder/light_builder.h"
 #include "capsaicin_internal.h"
+#include "components/light_builder/light_builder.h"
+#include "components/random_number_generator/random_number_generator.h"
 
 namespace Capsaicin
 {
@@ -44,6 +45,7 @@ RenderOptionList LightSamplerGridCDF::getRenderOptions() noexcept
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_cdf_threshold, options));
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_cdf_octahedron_sampling, options));
     newOptions.emplace(RENDER_OPTION_MAKE(light_grid_cdf_centroid_build, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(light_grid_cdf_cell_overlap, options));
     return newOptions;
 }
 
@@ -56,6 +58,7 @@ LightSamplerGridCDF::RenderOptions LightSamplerGridCDF::convertOptions(
     RENDER_OPTION_GET(light_grid_cdf_threshold, newOptions, options)
     RENDER_OPTION_GET(light_grid_cdf_octahedron_sampling, newOptions, options)
     RENDER_OPTION_GET(light_grid_cdf_centroid_build, newOptions, options)
+    RENDER_OPTION_GET(light_grid_cdf_cell_overlap, newOptions, options)
     return newOptions;
 }
 
@@ -63,6 +66,7 @@ ComponentList LightSamplerGridCDF::getComponents() const noexcept
 {
     ComponentList components;
     components.emplace_back(COMPONENT_MAKE(LightBuilder));
+    components.emplace_back(COMPONENT_MAKE(RandomNumberGenerator));
     return components;
 }
 
@@ -88,6 +92,7 @@ void LightSamplerGridCDF::run(CapsaicinInternal &capsaicin) noexcept
         optionsNew.light_grid_cdf_threshold != options.light_grid_cdf_threshold
         || optionsNew.light_grid_cdf_octahedron_sampling != options.light_grid_cdf_octahedron_sampling
         || optionsNew.light_grid_cdf_centroid_build != options.light_grid_cdf_centroid_build
+        || optionsNew.light_grid_cdf_cell_overlap != options.light_grid_cdf_cell_overlap
         || (optionsNew.light_grid_cdf_lights_per_cell != options.light_grid_cdf_lights_per_cell
             && (optionsNew.light_grid_cdf_lights_per_cell == 0
                 || options.light_grid_cdf_lights_per_cell == 0))
@@ -97,6 +102,7 @@ void LightSamplerGridCDF::run(CapsaicinInternal &capsaicin) noexcept
         || optionsNew.light_grid_cdf_lights_per_cell != options.light_grid_cdf_lights_per_cell
         || optionsNew.light_grid_cdf_num_cells != options.light_grid_cdf_num_cells
         || optionsNew.light_grid_cdf_centroid_build != options.light_grid_cdf_centroid_build
+        || optionsNew.light_grid_cdf_cell_overlap != options.light_grid_cdf_cell_overlap
         || lightBuilder->getLightSettingsUpdated() || config.numCells.x == 0 /*i.e. uninitialised*/;
     options = optionsNew;
 
@@ -232,7 +238,7 @@ void LightSamplerGridCDF::renderGUI(CapsaicinInternal &capsaicin) const noexcept
                 1, 1, static_cast<int32_t>(currentLights));
         }
         ImGui::SameLine();
-        if (ImGui::Checkbox("Auto", &autoLights))
+        if (ImGui::Checkbox("Auto##2", &autoLights))
         {
             capsaicin.setOption<uint32_t>("light_grid_cdf_lights_per_cell", autoLights ? 0 : currentLights);
         }
@@ -266,6 +272,10 @@ std::vector<std::string> LightSamplerGridCDF::getShaderDefines(
     {
         baseDefines.emplace_back("LIGHT_SAMPLE_VOLUME_CENTROID");
     }
+    if (options.light_grid_cdf_cell_overlap)
+    {
+        baseDefines.emplace_back("LIGHT_SAMPLE_VOLUME_OVERLAP");
+    }
     if (options.light_grid_cdf_lights_per_cell == 0)
     {
         baseDefines.emplace_back("LIGHTSAMPLERCDF_HAS_ALL_LIGHTS");
@@ -278,6 +288,9 @@ void LightSamplerGridCDF::addProgramParameters(
 {
     auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
     lightBuilder->addProgramParameters(capsaicin, program);
+
+    auto const rng = capsaicin.getComponent<RandomNumberGenerator>();
+    rng->addProgramParameters(capsaicin, program);
 
     // Bind the light sampling shader parameters
     gfxProgramSetParameter(gfx_, program, "g_LightSampler_Configuration", configBuffer);
@@ -293,7 +306,7 @@ bool LightSamplerGridCDF::getLightSettingsUpdated(
 
 std::string_view LightSamplerGridCDF::getHeaderFile() const noexcept
 {
-    return "\"../../components/light_sampler_grid_cdf/light_sampler_grid_cdf.hlsl\"";
+    return "\"components/light_sampler_grid_cdf/light_sampler_grid_cdf.hlsl\"";
 }
 
 bool LightSamplerGridCDF::initKernels(CapsaicinInternal const &capsaicin) noexcept

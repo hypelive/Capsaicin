@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -69,6 +69,7 @@ public:
             false; /**< Use faster reservoir parallel build on scene with large light count */
         bool light_grid_stream_centroid_build =
             false; /**< Use faster but simpler cell centroid sampling during build */
+        bool light_grid_stream_cell_overlap = false; /**< Use light-cell overlap to weight point/spotlights */
     };
 
     /**

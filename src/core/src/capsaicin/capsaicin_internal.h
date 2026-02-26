@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -577,8 +577,14 @@ public:
     [[nodiscard]] GfxCamera const &getCamera() const;
 
     /**
+     * Gets the previous camera data.
+     * @return The previous camera.
+     */
+    [[nodiscard]] GfxCamera const &getPrevCamera() const;
+
+    /**
      * Gets camera matrices for current camera.
-     * There are 2 versions of each camera matrices depending on whether jotter should be applied or not.
+     * There are 2 versions of each camera matrices depending on whether jitter should be applied or not.
      * @param jittered (Optional) True if jittered camera matrices should be returned.
      * @return The camera matrices.
      */
@@ -586,7 +592,7 @@ public:
 
     /**
      * Gets GPU camera matrices buffer.
-     * There are 2 versions of each camera matrices depending on whether jotter should be applied or not.
+     * There are 2 versions of each camera matrices depending on whether jitter should be applied or not.
      * @param jittered (Optional) True if jittered camera matrices should be returned.
      * @return The camera matrices buffer.
      */
@@ -686,7 +692,7 @@ public:
     [[nodiscard]] std::pair<float3, float3> getSceneBounds() const;
 
     template<typename TYPE>
-    [[nodiscard]] GfxBuffer allocateConstantBuffer(uint32_t const element_count)
+    [[nodiscard]] GfxBuffer allocateConstantBuffer(uint32_t const element_count = 1)
     {
         GfxBuffer constant_buffer = allocateConstantBuffer(element_count * sizeof(TYPE));
         constant_buffer.setStride(static_cast<uint32_t>(sizeof(TYPE)));
@@ -756,6 +762,14 @@ public:
      */
     [[nodiscard]] GfxProgram createProgram(char const *file_name) const noexcept;
 
+    /*
+     * A helper to run dispatch of the kernel with selected dimensions
+     * Automatically figures out thread group size and launches kernel with appropriate dimensions
+     * @param kernel The kernel to be dispatched.
+     * @param dimensions The number of threads to be run.
+     */
+    void dispatchKernel(GfxKernel const &kernel, uint2 dimensions) const noexcept;
+
     /**
      * Initializes Capsaicin. Must be called before any other functions.
      * @param gfx The gfx context to use inside Capsaicin.
@@ -797,6 +811,13 @@ public:
      * @param jittered    Jittered camera or not.
      */
     void dumpCamera(std::filesystem::path const &filePath, bool jittered) const;
+
+    /**
+     * Gets the profiling information for each timed section from the current frame.
+     * Should be called after gfxFrame().
+     * @returns Timestamps for each sub-section (see NodeTimestamps for details).
+     */
+    std::vector<NodeTimestamps> getProfiling() noexcept;
 
 private:
     /*
@@ -863,7 +884,7 @@ private:
      * techniques.
      * @param name Name of the renderer to set up.
      */
-    void setupRenderTechniques(std::string_view const &name) noexcept;
+    [[nodiscard]] bool setupRenderTechniques(std::string_view const &name) noexcept;
 
     /**
      * Reset current frame index and duration state.
@@ -1030,16 +1051,17 @@ private:
     uint32_t  jitter_phase_count_ = 16; /**< Current jitter phase used to modulo jitter index */
     float2    camera_jitter_ {};        /**< Jitter applied to camera matrices (x, y) respectively */
     GfxCamera camera_prev_;             /**< Camera used in the previous frame */
+    GfxCamera camera_prev_backup_;      /**< Backup of the camera used in the previous frame */
 
     RenderOptionList options_; /**< Options for controlling the operation of each render technique */
 
     std::vector<std::unique_ptr<RenderTechnique>>
         render_techniques_; /**< The list of render techniques to be applied. */
-    std::map<std::string_view /*name*/, std::shared_ptr<Component>>
-                              components_;         /**< The list of render techniques to be applied. */
-    std::string_view          renderer_name_;      /**< Currently used renderer string name */
-    std::unique_ptr<Renderer> renderer_ = nullptr; /**< Currently used renderer */
-    using DebugViews                    = std::vector<std::pair<std::string_view, bool>>;
+    using ComponentPair = std::pair<std::string_view /*name*/, std::shared_ptr<Component>>;
+    std::vector<ComponentPair> components_;         /**< The list of render component currently in use. */
+    std::string_view           renderer_name_;      /**< Currently used renderer string name */
+    std::unique_ptr<Renderer>  renderer_ = nullptr; /**< Currently used renderer */
+    using DebugViews                     = std::vector<std::pair<std::string_view, bool>>;
     DebugViews       debug_views_; /**< List of available debug views */
     std::string_view debug_view_;  /**< The debug view to use (get available from GetDebugViews() -
                                                "None" or empty for default behaviour) */

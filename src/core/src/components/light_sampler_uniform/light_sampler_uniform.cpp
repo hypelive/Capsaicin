@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,8 +22,9 @@ THE SOFTWARE.
 
 #include "light_sampler_uniform.h"
 
-#include "../light_builder/light_builder.h"
 #include "capsaicin_internal.h"
+#include "components/light_builder/light_builder.h"
+#include "components/random_number_generator/random_number_generator.h"
 
 namespace Capsaicin
 {
@@ -40,6 +41,7 @@ ComponentList LightSamplerUniform::getComponents() const noexcept
 {
     ComponentList components;
     components.emplace_back(COMPONENT_MAKE(LightBuilder));
+    components.emplace_back(COMPONENT_MAKE(RandomNumberGenerator));
     return components;
 }
 
@@ -69,11 +71,14 @@ void LightSamplerUniform::addProgramParameters(
 {
     auto const lightBuilder = capsaicin.getComponent<LightBuilder>();
     lightBuilder->addProgramParameters(capsaicin, program);
+
+    auto const rng = capsaicin.getComponent<RandomNumberGenerator>();
+    rng->addProgramParameters(capsaicin, program);
 }
 
 std::string_view LightSamplerUniform::getHeaderFile() const noexcept
 {
-    return "\"../../components/light_sampler_uniform/light_sampler_uniform.hlsl\"";
+    return "\"components/light_sampler_uniform/light_sampler_uniform.hlsl\"";
 }
 
 bool LightSamplerUniform::getLightSettingsUpdated(CapsaicinInternal const &capsaicin) const noexcept

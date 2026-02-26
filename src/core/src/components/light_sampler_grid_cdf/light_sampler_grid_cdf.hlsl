@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -41,16 +41,12 @@ RWStructuredBuffer<float> g_LightSampler_CellsCDF;
 #include "lights/light_sampling.hlsl"
 #include "materials/material_evaluation.hlsl"
 #include "lights/light_sampling_volume.hlsl"
-#include "math/random.hlsl"
 #ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
 #include "lights/reservoir.hlsl"
 #endif
 
-
-class LightSamplerGridCDF
+namespace LightSamplerGridCDF
 {
-    Random randomNG;
-
     /**
      * Perform a search of the light list for a light with CDF closest to a given value.
      * @param startIndex The index of the first item to start searching at.
@@ -65,17 +61,17 @@ class LightSamplerGridCDF
         uint len = numLights;
         while (len > 0)
         {
-            uint halfed = len >> 1;
-            uint middle = first + halfed;
+            uint halved = len >> 1;
+            uint middle = first + halved;
             // Bisect range based on value at middle
             if (g_LightSampler_CellsCDF[startIndex + middle] < value)
             {
                 first = middle + 1;
-                len -= halfed + 1;
+                len -= halved + 1;
             }
             else
             {
-                len = halfed;
+                len = halved;
             }
         }
         const uint sampledIndexBase = min(first, numLights - 1);
@@ -86,14 +82,15 @@ class LightSamplerGridCDF
 
     /**
      * Sample the index and PDF for a sampled light.
+     * @tparam RNG The type of random number sampler to be used.
+     * @param randomNG  Random number generator used to sample lights.
      * @param cellIndex The index of the current cell.
      * @param numLights The number of lights in the cell.
-     * @param position  Current position on surface.
-     * @param normal    Shading normal vector at current position.
      * @param lightPDF  (Out) The PDF for the calculated sample.
      * @return The index of the sampled light.
      */
-    uint getSampledLight(uint cellIndex, uint numLights, float3 position, float3 normal, out float lightPDF)
+    template<typename RNG>
+    uint getSampledLight(inout RNG randomNG, uint cellIndex, uint numLights, out float lightPDF)
     {
         float rand = randomNG.rand();
 #ifndef LIGHTSAMPLERCDF_HAS_ALL_LIGHTS
@@ -150,211 +147,213 @@ class LightSamplerGridCDF
 #endif
         return g_LightSampler_CellsIndex[sampledIndex];
     }
+}
 
-    /**
-     * Get a sample light.
-     * @param position Current position on surface.
-     * @param normal   Shading normal vector at current position.
-     * @param lightPDF (Out) The PDF for the calculated sample (is equal to zero if no valid samples could be found).
-     * @return The index of the new light sample
-     */
-    uint sampleLights(float3 position, float3 normal, out float lightPDF)
-    {
-        // Get the current cell buffer index
+/**
+ * Get a sample light.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG Random number generator used to sample lights.
+ * @param position Current position on surface.
+ * @param normal   Shading normal vector at current position.
+ * @param lightPDF (Out) The PDF for the calculated sample (is equal to zero if no valid samples could be found).
+ * @return The index of the new light sample
+ */
+template<typename RNG>
+uint sampleLights(inout RNG randomNG, float3 position, float3 normal, out float lightPDF)
+{
+    // Get the current cell buffer index
 #ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
+    const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
 #else
-        const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
+    const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
 #endif
-        const uint numLights = g_LightSampler_CellsIndex[cellIndex];
+    const uint numLights = g_LightSampler_CellsIndex[cellIndex];
 
-        // Return invalid sample if the cell doesn't contain any lights
-        if (numLights == 0)
-        {
-            lightPDF = 0.0f;
-            return 0;
-        }
-
-        // Choose a light to sample from
-        uint lightIndex = getSampledLight(cellIndex, numLights, position, normal, lightPDF);
-        return lightIndex;
+    // Return invalid sample if the cell doesn't contain any lights
+    if (numLights == 0)
+    {
+        lightPDF = 0.0f;
+        return 0;
     }
 
-    /**
-     * Calculate the PDF of sampling a given light.
-     * @param lightID  The index of the given light.
-     * @param position The position on the surface currently being shaded.
-     * @param normal   Shading normal vector at current position.
-     * @return The calculated PDF with respect to the light.
-     */
-    float sampleLightPDF(uint lightID, float3 position, float3 normal)
-    {
-        // Calculate which cell we are in based on input point
-        const uint3 cell = LightSamplerGrid::getCellFromJitteredPosition(position, randomNG);
+    // Choose a light to sample from
+    uint lightIndex = LightSamplerGridCDF::getSampledLight(randomNG, cellIndex, numLights, lightPDF);
+    return lightIndex;
+}
 
-        // Calculate position of current cell in output buffer
+/**
+ * Calculate the PDF of sampling a given light.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG Random number generator used to sample lights.
+ * @param lightID  The index of the given light.
+ * @param position The position on the surface currently being shaded.
+ * @param normal   Shading normal vector at current position.
+ * @return The calculated PDF with respect to the light.
+ */
+template<typename RNG>
+float sampleLightsPDF(inout RNG randomNG, uint lightID, float3 position, float3 normal)
+{
+    // Calculate which cell we are in based on input point
+    const uint3 cell = LightSamplerGrid::getCellFromJitteredPosition(position, randomNG);
+
+    // Calculate position of current cell in output buffer
 #ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        const uint cellIndex = LightSamplerGrid::getCellOctaIndex(cell, LightSamplerGrid::getCellFace(normal));
+    const uint cellIndex = LightSamplerGrid::getCellOctaIndex(cell, LightSamplerGrid::getCellFace(normal));
 #else
-        const uint cellIndex = LightSamplerGrid::getCellIndex(cell);
+    const uint cellIndex = LightSamplerGrid::getCellIndex(cell);
 #endif
 
 #ifndef LIGHTSAMPLERCDF_HAS_ALL_LIGHTS
-        // For CDF sampling the probability is based on finding it in the current CDF list
-        const float totalLights = (float)getNumberLights();
-        const float insideProb = g_LightSampler_CellsCDF[cellIndex];
-        const float outsideProb = 1.0f - insideProb;
-        const uint numLights = g_LightSampler_CellsIndex[cellIndex];
-        const uint startIndex = cellIndex + 1;
-        for (uint currentIndex = startIndex; currentIndex < startIndex + numLights; ++currentIndex)
+    // For CDF sampling the probability is based on finding it in the current CDF list
+    const float totalLights = (float)getNumberLights();
+    const float insideProb = g_LightSampler_CellsCDF[cellIndex];
+    const float outsideProb = 1.0f - insideProb;
+    const uint numLights = g_LightSampler_CellsIndex[cellIndex];
+    const uint startIndex = cellIndex + 1;
+    for (uint currentIndex = startIndex; currentIndex < startIndex + numLights; ++currentIndex)
+    {
+        if (g_LightSampler_CellsIndex[currentIndex] == lightID)
         {
-            if (g_LightSampler_CellsIndex[currentIndex] == lightID)
-            {
-                const float sourcePDF = g_LightSampler_CellsCDF[currentIndex];
-                const float previousCDF = (currentIndex > startIndex) ? g_LightSampler_CellsCDF[currentIndex - 1] : 0.0f;
-                float lightPDF = sourcePDF - previousCDF;
-                // Weight by probability of using the CDF plus the probability of it also being uniformly sampled
-                lightPDF *= insideProb;
-                lightPDF += outsideProb / totalLights;
-                return lightPDF;
-            }
+            const float sourcePDF = g_LightSampler_CellsCDF[currentIndex];
+            const float previousCDF = (currentIndex > startIndex) ? g_LightSampler_CellsCDF[currentIndex - 1] : 0.0f;
+            float lightPDF = sourcePDF - previousCDF;
+            // Weight by probability of using the CDF plus the probability of it also being uniformly sampled
+            lightPDF *= insideProb;
+            lightPDF += outsideProb / totalLights;
+            return lightPDF;
         }
+    }
 
-        // Just use a uniform sampling for those outside CDF
-        float lightPDF = outsideProb / totalLights;
-        return lightPDF;
+    // Just use a uniform sampling for those outside CDF
+    float lightPDF = outsideProb / totalLights;
+    return lightPDF;
 #else
-        // Instead of searching for the light in the list we just re-calculate its weight as this
-        //   makes it a constant time operation.
-        // Calculate the bounding box for the current cell
-        float3 extent;
-        const float3 minBB = LightSamplerGrid::getCellBB(cell, extent);
-        Light selectedLight = getLight(lightID);
+    // Instead of searching for the light in the list we just re-calculate its weight as this
+    //   makes it a constant time operation.
+    // Calculate the bounding box for the current cell
+    float3 extent;
+    const float3 minBB = LightSamplerGrid::getCellBB(cell, extent);
+    Light selectedLight = getLight(lightID);
 #   ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        float weight = sampleLightVolumeNormal(selectedLight, minBB, extent, normal);
+    float weight = sampleLightVolumeNormal(selectedLight, minBB, extent, normal);
 #   else
-        float weight = sampleLightVolume(selectedLight, minBB, extent);
+    float weight = sampleLightVolume(selectedLight, minBB, extent);
 #   endif // LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        weight *= g_LightSampler_CellsCDF[cellIndex];
-        return weight;
+    weight *= g_LightSampler_CellsCDF[cellIndex];
+    return weight;
 #endif
-    }
-
-#ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
-    /**
-     * Sample multiple lights into a reservoir.
-     * @tparam numSampledLights Number of lights to sample.
-     * @param position      Current position on surface.
-     * @param normal        Shading normal vector at current position.
-     * @param viewDirection View direction vector at current position.
-     * @param material      Material for current surface position.
-     * @return Reservoir containing combined samples.
-     */
-    template<uint numSampledLights>
-    Reservoir sampleLightList(float3 position, float3 normal, float3 viewDirection, MaterialBRDF material)
-    {
-        // Get the current cell buffer index
-#   ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
-#   else
-        const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
-#   endif
-        const uint numLights = g_LightSampler_CellsIndex[cellIndex];
-        const uint newLights = numSampledLights;
-
-        // Return invalid sample if the cell doesn't contain any lights
-        if (numLights == 0)
-        {
-            return MakeReservoir();
-        }
-
-        // Create reservoir updater
-        ReservoirUpdater updater = MakeReservoirUpdater();
-
-        // Loop through until we have the requested number of lights
-        for (uint i = 0; i < newLights; ++i)
-        {
-            // Choose a light to sample from
-            float lightPDF;
-            uint lightIndex = getSampledLight(cellIndex, numLights, position, normal, lightPDF);
-
-            // Add the light sample to the reservoir
-            updateReservoir(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, newLights);
-        }
-
-        // Get finalised reservoir for return
-        return updater.reservoir;
-    }
-
-    /**
-     * Sample multiple lights into a reservoir using cone angle.
-     * @tparam numSampledLights Number of lights to sample.
-     * @param position      Current position on surface.
-     * @param normal        Shading normal vector at current position.
-     * @param viewDirection View direction vector at current position.
-     * @param solidAngle    Solid angle around view direction of visible ray cone.
-     * @param material      Material for current surface position.
-     * @return Reservoir containing combined samples.
-     */
-    template<uint numSampledLights>
-    Reservoir sampleLightListCone(float3 position, float3 normal, float3 viewDirection, float solidAngle, MaterialBRDF material)
-    {
-        // Get the current cell buffer index
-#   ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
-        const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
-#   else
-        const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
-#   endif
-        const uint numLights = g_LightSampler_CellsIndex[cellIndex];
-        const uint newLights = min(numLights, numSampledLights);
-
-        // Return invalid sample if the cell doesn't contain any lights
-        if (numLights == 0)
-        {
-            return MakeReservoir();
-        }
-
-        // Create reservoir updater
-        ReservoirUpdater updater = MakeReservoirUpdater();
-
-        // Loop through until we have the requested number of lights
-        for (uint i = 0; i < newLights; ++i)
-        {
-            // Choose a light to sample from
-            float lightPDF;
-            uint lightIndex = getSampledLight(cellIndex, numLights, position, normal, lightPDF);
-
-            // Add the light sample to the reservoir
-            updateReservoirCone(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, solidAngle, newLights);
-        }
-
-        // Get finalised reservoir for return
-        return updater.reservoir;
-    }
-
-    /**
-     * Calculate the PDF of sampling a given light using one of the reservoir list sampling functions.
-     * @tparam numSampledLights Number of lights sampled.
-     * @param lightID  The index of the given light.
-     * @param position The position on the surface currently being shaded.
-     * @param normal   Shading normal vector at current position.
-     * @return The calculated PDF with respect to the light.
-     */
-    template<uint numSampledLights>
-    float sampleLightListPDF(uint lightID, float3 position, float3 normal)
-    {
-        return sampleLightPDF(lightID, position, normal);
-    }
-#endif // LIGHT_SAMPLER_ENABLE_RESERVOIR
-};
-
-LightSamplerGridCDF MakeLightSampler(Random random)
-{
-    LightSamplerGridCDF ret;
-    ret.randomNG = random;
-    return ret;
 }
 
-typedef LightSamplerGridCDF LightSampler;
+#ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
+/**
+ * Sample multiple lights into a reservoir.
+ * @tparam numSampledLights Number of lights to sample.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG      Random number generator used to sample lights.
+ * @param position      Current position on surface.
+ * @param normal        Shading normal vector at current position.
+ * @param viewDirection View direction vector at current position.
+ * @param material      Material for current surface position.
+ * @return Reservoir containing combined samples.
+ */
+template<uint numSampledLights, typename RNG>
+Reservoir sampleLightsList(inout RNG randomNG, float3 position, float3 normal, float3 viewDirection, MaterialBRDF material)
+{
+    // Get the current cell buffer index
+#ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
+    const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
+#   else
+    const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
+#   endif
+    const uint numLights = g_LightSampler_CellsIndex[cellIndex];
+    const uint newLights = numSampledLights;
+
+    // Return invalid sample if the cell doesn't contain any lights
+    if (numLights == 0)
+    {
+        return MakeReservoir();
+    }
+
+    // Create reservoir updater
+    ReservoirUpdater updater = MakeReservoirUpdater();
+
+    // Loop through until we have the requested number of lights
+    for (uint i = 0; i < newLights; ++i)
+    {
+        // Choose a light to sample from
+        float lightPDF;
+        uint lightIndex = LightSamplerGridCDF::getSampledLight(randomNG, cellIndex, numLights, lightPDF);
+
+        // Add the light sample to the reservoir
+        updateReservoir(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, newLights);
+    }
+
+    // Get finalised reservoir for return
+    return updater.reservoir;
+}
+
+/**
+ * Sample multiple lights into a reservoir using cone angle.
+ * @tparam numSampledLights Number of lights to sample.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG      Random number generator used to sample lights.
+ * @param position      Current position on surface.
+ * @param normal        Shading normal vector at current position.
+ * @param viewDirection View direction vector at current position.
+ * @param solidAngle    Solid angle around view direction of visible ray cone.
+ * @param material      Material for current surface position.
+ * @return Reservoir containing combined samples.
+ */
+template<uint numSampledLights, typename RNG>
+Reservoir sampleLightsListCone(inout RNG randomNG, float3 position, float3 normal, float3 viewDirection, float solidAngle, MaterialBRDF material)
+{
+    // Get the current cell buffer index
+#ifdef LIGHTSAMPLERCDF_USE_OCTAHEDRON_SAMPLING
+    const uint cellIndex = LightSamplerGrid::getCellOctaIndexFromJitteredPosition(position, normal, randomNG);
+#   else
+    const uint cellIndex = LightSamplerGrid::getCellIndexFromJitteredPosition(position, randomNG);
+#   endif
+    const uint numLights = g_LightSampler_CellsIndex[cellIndex];
+    const uint newLights = min(numLights, numSampledLights);
+
+    // Return invalid sample if the cell doesn't contain any lights
+    if (numLights == 0)
+    {
+        return MakeReservoir();
+    }
+
+    // Create reservoir updater
+    ReservoirUpdater updater = MakeReservoirUpdater();
+
+    // Loop through until we have the requested number of lights
+    for (uint i = 0; i < newLights; ++i)
+    {
+        // Choose a light to sample from
+        float lightPDF;
+        uint lightIndex = LightSamplerGridCDF::getSampledLight(randomNG, cellIndex, numLights, lightPDF);
+
+        // Add the light sample to the reservoir
+        updateReservoirCone(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, solidAngle, newLights);
+    }
+
+    // Get finalised reservoir for return
+    return updater.reservoir;
+}
+
+/**
+ * Calculate the PDF of sampling a given light using one of the reservoir list sampling functions.
+ * @tparam numSampledLights Number of lights sampled.
+ * @param randomNG Random number generator used to sample lights.
+ * @param lightID  The index of the given light.
+ * @param position The position on the surface currently being shaded.
+ * @param normal   Shading normal vector at current position.
+ * @return The calculated PDF with respect to the light.
+ */
+template<uint numSampledLights, typename RNG>
+float sampleLightsListPDF(inout RNG randomNG, uint lightID, float3 position, float3 normal)
+{
+    return sampleLightsPDF(randomNG, lightID, position, normal);
+}
+#endif // LIGHT_SAMPLER_ENABLE_RESERVOIR
 
 #endif // LIGHT_BOUNDS_SAMPLER_HLSL

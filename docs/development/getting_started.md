@@ -6,7 +6,7 @@
 
 When acquiring the code make sure to clone the repo with submodules included:
 
-`git clone --recurse-submodules https://github.com/Radeon-Pro/Capsaicin`
+`git clone --recurse-submodules https://github.com/GPUOpen-LibrariesAndSDKs/Capsaicin`
 
 If you have already cloned this repo without submodules, then use:
 
@@ -36,9 +36,7 @@ The used third party dependencies and there expected names are:
 - CLI11: CLI11 is a command line parser for C++11 and beyond
 - yaml-cpp: yaml-cpp is a YAML parser and emitter in C++
 - nlohmann-json: JSON for Modern C++
-- onnxruntime-gpu: Cross-platform, high performance ML inferencing and training accelerator 
-- directml: High-performance, hardware-accelerated DirectX 12 library for machine learning
-- gtest: Google Testing and Mocking Framework (only used when testing enabled)
+- meshoptimizer: Mesh optimization library that makes meshes smaller and faster to render
 - gfx third party dependencies:
     - d3d12-memory-allocator: Easy to integrate D3d12 memory allocation library from GPUOpen
     - DirectX12-Agility: DirectX 12 Agility SDK

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "math/math.hlsl"
 #include "math/color.hlsl"
+#include "math/eotf.hlsl"
 
 uint2 g_ImageDimensions;
 
@@ -117,8 +117,8 @@ float2 GetImageValues(uint2 pixel)
     // Standard MSE metrics dont work well with HDR data
     // As such the input values need to be converted to non-linear perceptual values using a conversion metric
     // Here we use the ITU Rec2100 Perceptual Quantizer (PQ) transfer function
-    input = decodePQEOTF(input);
-    reference = decodePQEOTF(reference);
+    input = decodeEOTFST2048(input);
+    reference = decodeEOTFST2048(reference);
 #endif
     return float2(input, reference);
 }

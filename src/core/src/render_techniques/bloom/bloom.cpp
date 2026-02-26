@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -59,21 +59,24 @@ Bloom::RenderOptions Bloom::convertOptions(RenderOptionList const &options) noex
 SharedBufferList Bloom::getSharedBuffers() const noexcept
 {
     SharedBufferList buffers;
-    buffers.push_back({"Exposure", SharedBuffer::Access::Read});
+    buffers.push_back({.name = "Exposure", .access = SharedBuffer::Access::Read});
     return buffers;
 }
 
 SharedTextureList Bloom::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
-    textures.push_back({"Debug", SharedTexture::Access::Write});
-    textures.push_back({"ColorScaled", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Optional});
+    textures.push_back({.name = "Color", .access = SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "Debug", .access = SharedTexture::Access::Write});
+    textures.push_back({.name = "ColorScaled",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::OptionalDiscard});
     return textures;
 }
 
 bool Bloom::init(CapsaicinInternal const &capsaicin) noexcept
 {
+    options = convertOptions(capsaicin.getOptions());
     if (options.bloom_enable)
     {
         // Create scratch texture use for bloom output
@@ -112,8 +115,8 @@ void Bloom::render(CapsaicinInternal &capsaicin) noexcept
         {
             // Destroy resources when not being used
             terminate();
-            options.bloom_enable = false;
         }
+        options = newOptions;
         return;
     }
 

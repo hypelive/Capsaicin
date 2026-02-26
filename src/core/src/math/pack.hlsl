@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -45,7 +45,7 @@ uint packUnorm1x8(float value)
  */
 uint packUnorm2x8(float2 value)
 {
-    uint2 packedValue = uint2(saturate(value) * 255.0f.xx + 0.5f.xx);
+    uint2 packedValue = uint2(saturate(value) * 255.0f + 0.5f);
     return packedValue.x | (packedValue.y << 8);
 }
 
@@ -57,7 +57,7 @@ uint packUnorm2x8(float2 value)
  */
 uint packUnorm3x8(float3 value)
 {
-    uint3 packedValue = uint3(saturate(value) * 255.0f.xxx + 0.5f.xxx);
+    uint3 packedValue = uint3(saturate(value) * 255.0f + 0.5f);
     return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16);
 }
 
@@ -69,8 +69,8 @@ uint packUnorm3x8(float3 value)
  */
 uint packUnorm4x8(float4 value)
 {
-    uint4 packedValue = uint4(saturate(value) * 255.0f.xxxx + 0.5f.xxxx);
-    return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16) | (packedValue.w << 24);
+    uint4 packedValue = uint4(saturate(value) * 255.0f + 0.5f);
+    return pack_u8(packedValue);
 }
 
 /**
@@ -90,8 +90,8 @@ float unpackUnorm1x8(uint packedValue)
  */
 float2 unpackUnorm2x8(uint packedValue)
 {
-    uint2 value = uint2(packedValue, packedValue >> 8) & 0xFFu.xx;
-    return float2(value) * (1.0f / 255.0f).xx;
+    uint2 value = uint2(packedValue, packedValue >> 8) & 0xFFu;
+    return float2(value) * (1.0f / 255.0f);
 }
 
 /**
@@ -102,8 +102,8 @@ float2 unpackUnorm2x8(uint packedValue)
 float3 unpackUnorm3x8(uint packedValue)
 {
     uint3 value = uint3(packedValue, packedValue >> 8,
-        packedValue >> 16) & 0xFFu.xxx;
-    return float3(value) * (1.0f / 255.0f).xxx;
+        packedValue >> 16) & 0xFFu;
+    return float3(value) * (1.0f / 255.0f);
 }
 
 /**
@@ -113,8 +113,7 @@ float3 unpackUnorm3x8(uint packedValue)
  */
 float4 unpackUnorm4x8(uint packedValue)
 {
-    uint4 value = uint4(packedValue, packedValue >> 8, packedValue >> 16, packedValue >> 24) & 0xFFu.xxxx;
-    return float4(value) * (1.0f / 255.0f).xxxx;
+    return float4(unpack_u8u32(packedValue)) * (1.0f / 255.0f);
 }
 
 /**
@@ -137,7 +136,7 @@ uint packSnorm1x8(float value)
  */
 uint packSnorm2x8(float2 value)
 {
-    int2 packedValue = int2(clamp(value, -1.0f.xx, 1.0f.xx) * 127.0f.xx + (0.5f.xx * sign(value))) & 0xFF.xx;
+    int2 packedValue = int2(clamp(value, -1.0f, 1.0f) * 127.0f + (0.5f * sign(value))) & 0xFF;
     return packedValue.x | (packedValue.y << 8);
 }
 
@@ -149,7 +148,7 @@ uint packSnorm2x8(float2 value)
  */
 uint packSnorm3x8(float3 value)
 {
-    int3 packedValue = int3(clamp(value, -1.0f.xxx, 1.0f.xxx) * 127.0f.xxx + (0.5f.xxx * sign(value))) & 0xFF.xxx;
+    int3 packedValue = int3(clamp(value, -1.0f, 1.0f) * 127.0f + (0.5f * sign(value))) & 0xFF;
     return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16);
 }
 
@@ -161,8 +160,8 @@ uint packSnorm3x8(float3 value)
  */
 uint packSnorm4x8(float4 value)
 {
-    int4 packedValue = int4(clamp(value, -1.0f.xxxx, 1.0f.xxxx) * 127.0f.xxxx + (0.5f.xxxx * sign(value))) & 0xFF.xxxx;
-    return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16) | (packedValue.w << 24);
+    int4 packedValue = int4(clamp(value, -1.0f, 1.0f) * 127.0f + (0.5f * sign(value)));
+    return pack_s8(packedValue);
 }
 
 /**
@@ -184,7 +183,7 @@ float unpackSnorm1x8(uint packedValue)
 float2 unpackSnorm2x8(uint packedValue)
 {
     int2 value = int2(int(packedValue << 24), int(packedValue << 16)) >> 24;
-    return float2(value) * (1.0f / 127.0f).xx;
+    return float2(value) * (1.0f / 127.0f);
 }
 
 /**
@@ -195,7 +194,7 @@ float2 unpackSnorm2x8(uint packedValue)
 float3 unpackSnorm3x8(uint packedValue)
 {
     int3 value = int3(int(packedValue << 24), int(packedValue << 16), int(packedValue << 8)) >> 24;
-    return float3(value) * (1.0f / 127.0f).xxx;
+    return float3(value) * (1.0f / 127.0f);
 }
 
 /**
@@ -205,8 +204,7 @@ float3 unpackSnorm3x8(uint packedValue)
  */
 float4 unpackSnorm4x8(uint packedValue)
 {
-    int4 value = int4(int(packedValue << 24), int(packedValue << 16), int(packedValue << 8), int(packedValue)) >> 24;
-    return float4(value) * (1.0f / 127.0f).xxxx;
+    return float4(unpack_s8s32(packedValue)) * (1.0f / 127.0f);
 }
 
 /**
@@ -229,7 +227,7 @@ uint packUnorm1x16(float value)
  */
 uint packUnorm2x16(float2 value)
 {
-    uint2 packedValue = uint2(saturate(value) * 65535.0f.xx + 0.5f.xx);
+    uint2 packedValue = uint2(saturate(value) * 65535.0f + 0.5f);
     return packedValue.x | (packedValue.y << 16);
 }
 
@@ -241,7 +239,7 @@ uint packUnorm2x16(float2 value)
  */
 uint2 packUnorm3x16(float3 value)
 {
-    uint3 packedValue = uint3(saturate(value) * 65535.0f.xxx + 0.5f.xxx);
+    uint3 packedValue = uint3(saturate(value) * 65535.0f + 0.5f);
     return uint2(packedValue.x | (packedValue.y << 16), packedValue.z);
 }
 
@@ -253,7 +251,7 @@ uint2 packUnorm3x16(float3 value)
  */
 uint2 packUnorm4x16(float4 value)
 {
-    uint4 packedValue = uint4(saturate(value) * 65535.0f.xxxx + 0.5f.xxxx);
+    uint4 packedValue = uint4(saturate(value) * 65535.0f + 0.5f);
     return uint2(packedValue.x | (packedValue.y << 16), packedValue.z | (packedValue.w << 16));
 }
 
@@ -274,8 +272,8 @@ float unpackUnorm1x16(uint packedValue)
  */
 float2 unpackUnorm2x16(uint packedValue)
 {
-    uint2 value = uint2(packedValue, packedValue >> 16) & 0xFFFFu.xx;
-    return float2(value) * (1.0f / 65535.0f).xx;
+    uint2 value = uint2(packedValue, packedValue >> 16) & 0xFFFFu;
+    return float2(value) * (1.0f / 65535.0f);
 }
 
 /**
@@ -286,8 +284,8 @@ float2 unpackUnorm2x16(uint packedValue)
 float3 unpackUnorm3x16(uint packedValue)
 {
     uint3 value = uint3(packedValue, packedValue >> 8,
-        packedValue >> 16) & 0xFFFFu.xxx;
-    return float3(value) * (1.0f / 65535.0f).xxx;
+        packedValue >> 16) & 0xFFFFu;
+    return float3(value) * (1.0f / 65535.0f);
 }
 
 /**
@@ -298,8 +296,8 @@ float3 unpackUnorm3x16(uint packedValue)
 float4 unpackUnorm4x16(uint packedValue)
 {
     uint4 value = uint4(packedValue, packedValue >> 8,
-        packedValue >> 16, packedValue >> 24) & 0xFFFFu.xxxx;
-    return float4(value) * (1.0f / 65535.0f).xxxx;
+        packedValue >> 16, packedValue >> 24) & 0xFFFFu;
+    return float4(value) * (1.0f / 65535.0f);
 }
 
 /**
@@ -322,7 +320,7 @@ uint packSnorm1x16(float value)
  */
 uint packSnorm2x16(float2 value)
 {
-    int2 packedValue = int2(clamp(value, -1.0f.xx, 1.0f.xx) * 32767.0f.xx + (0.5f.xx * sign(value))) & 0xFFFF.xx;
+    int2 packedValue = int2(clamp(value, -1.0f, 1.0f) * 32767.0f + (0.5f * sign(value))) & 0xFFFF;
     return packedValue.x | (packedValue.y << 8);
 }
 
@@ -334,7 +332,7 @@ uint packSnorm2x16(float2 value)
  */
 uint2 packSnorm3x16(float3 value)
 {
-    int3 packedValue = int3(clamp(value, -1.0f.xxx, 1.0f.xxx) * 32767.0f.xxx + (0.5f.xxx * sign(value))) & 0xFFFF.xxx;
+    int3 packedValue = int3(clamp(value, -1.0f, 1.0f) * 32767.0f + (0.5f * sign(value))) & 0xFFFF;
     return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16);
 }
 
@@ -346,7 +344,7 @@ uint2 packSnorm3x16(float3 value)
  */
 uint2 packSnorm4x16(float4 value)
 {
-    int4 packedValue = int4(clamp(value, -1.0f.xxxx, 1.0f.xxxx) * 32767.0f.xxxx + (0.5f.xxxx * sign(value))) & 0xFFFF.xxxx;
+    int4 packedValue = int4(clamp(value, -1.0f, 1.0f) * 32767.0f + (0.5f * sign(value))) & 0xFFFF;
     return packedValue.x | (packedValue.y << 8) | (packedValue.z << 16) | (packedValue.w << 24);
 }
 
@@ -369,7 +367,7 @@ float unpackSnorm1x16(uint packedValue)
 float2 unpackSnorm2x16(uint packedValue)
 {
     int2 value = int2(packedValue << 16, packedValue) >> 16;
-    return float2(value) * (1.0f / 32767.0f).xx;
+    return float2(value) * (1.0f / 32767.0f);
 }
 
 /**
@@ -380,7 +378,7 @@ float2 unpackSnorm2x16(uint packedValue)
 float3 unpackSnorm3x16(uint2 packedValue)
 {
     int3 value = int3(packedValue.x << 16, packedValue.x, packedValue.y << 16) >> 16;
-    return float3(value) * (1.0f / 32767.0f).xxx;
+    return float3(value) * (1.0f / 32767.0f);
 }
 
 /**
@@ -391,7 +389,7 @@ float3 unpackSnorm3x16(uint2 packedValue)
 float4 unpackSnorm4x16(uint2 packedValue)
 {
     int4 value = int4(packedValue.x << 16, packedValue.x, packedValue.y << 16, packedValue.y) >> 16;
-    return float4(value) * (1.0f / 32767.0f).xxxx;
+    return float4(value) * (1.0f / 32767.0f);
 }
 
 /**
@@ -469,7 +467,7 @@ float4 unpackHalf4(uint2 packedValue)
  */
 uint packNormal(float3 value)
 {
-    int3 packedValue = int3(clamp(value, -1.0f.xxx, 1.0f.xxx) * 511.0f.xxx + (0.5f.xxx * sign(value))) & 0x3FFu.xxx;
+    int3 packedValue = int3(clamp(value, -1.0f, 1.0f) * 511.0f + (0.5f * sign(value))) & 0x3FFu;
     return packedValue.x | (packedValue.y << 10) | (packedValue.z << 20);
 }
 
@@ -481,7 +479,7 @@ uint packNormal(float3 value)
 float3 unpackNormal(uint packedValue)
 {
     int3 value = int3(packedValue << 22, packedValue << 12, packedValue << 2) >> 22;
-    return float3(value) * (1.0f / 511.0f).xxx;
+    return float3(value) * (1.0f / 511.0f);
 }
 
 /**
@@ -520,7 +518,7 @@ uint packColor(float3 color)
 }
 
 /**
- * UnPack SDR (0->1) color values created by @packColor.
+ * UnPack SDR (0->1) color values created by \p packColor.
  * @param packed Input packed value.
  * @return The unpacked values.
  */
@@ -547,7 +545,7 @@ uint packFloat3(float3 input)
 }
 
 /**
- * UnPack packed float3 values created by @packFloat3.
+ * UnPack packed float3 values created by \p packFloat3.
  * @param packed Input packed value.
  * @return The unpacked values.
  */

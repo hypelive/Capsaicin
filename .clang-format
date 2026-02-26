@@ -8,26 +8,33 @@ AlignConsecutiveAssignments: Consecutive
 AlignConsecutiveBitFields: Consecutive
 AlignConsecutiveDeclarations: Consecutive
 AlignConsecutiveMacros: Consecutive
-#AlignConsecutiveShortCaseStatements: true 
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCaseColons: false
 AlignEscapedNewlines: Left
 AlignOperands: AlignAfterOperator
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: true
 AllowAllConstructorInitializersOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
-#AllowBreakBeforeNoexceptSpecifier: Never
+AllowBreakBeforeNoexceptSpecifier: Never
 AllowShortBlocksOnASingleLine: Empty
+#AllowShortCaseExpressionOnASingleLine : true
 AllowShortCaseLabelsOnASingleLine: true
-#AllowShortCompoundRequirementOnASingleLine: true
+AllowShortCompoundRequirementOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortLambdasOnASingleLine: Inline
 AllowShortLoopsOnASingleLine: false
+#AllowShortNamespacesOnASingleLine : false;
 AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: true
+#BinPackLongBracedList : true
 BinPackParameters: true
 BitFieldColonSpacing: Both
 BraceWrapping:
@@ -48,14 +55,16 @@ BraceWrapping:
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
-#BreakAdjacentStringLiterals: true
+BreakAdjacentStringLiterals: true
 BreakAfterAttributes: Never
-#BreakAfterReturnType: Automatic
+#BreakAfterReturnType: ExceptShortType
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Custom
 BreakBeforeConceptDeclarations: true
+#BreakBeforeTemplateCloser: false
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeComma
+#BreakFunctionDefinitionParameters: false
 BreakInheritanceList: BeforeComma
 BreakStringLiterals: false
 #BreakTemplateDeclarations: Yes
@@ -81,6 +90,7 @@ IncludeIsMainSourceRegex: '(.inl)$'
 IndentAccessModifiers: false
 IndentCaseBlocks: false
 IndentCaseLabels: false
+#IndentExportBlock: true
 IndentExternBlock: NoIndent
 IndentGotoLabels: false
 IndentPPDirectives: AfterHash
@@ -89,8 +99,16 @@ IndentWidth: 4
 IndentWrappedFunctionNames: false
 InsertBraces: true
 InsertNewlineAtEOF: true
+IntegerLiteralSeparator:
+  Binary: -1
+  Decimal: -1
+  Hex: -1
 KeepEmptyLinesAtEOF: true
 KeepEmptyLinesAtTheStartOfBlocks: false
+#KeepEmptyLines:
+#  AtEndOfFile: true
+#  AtStartOfBlock: false
+#  AtStartOfFile: false
 LambdaBodyIndentation: Signature
 LineEnding: LF
 #MainIncludeChar: Quote
@@ -103,13 +121,14 @@ QualifierAlignment: Custom
 QualifierOrder: ['inline', 'static', 'constexpr', 'const', 'volatile', 'type', 'restrict' ]
 ReferenceAlignment: Pointer
 ReflowComments: true
+#RemoveEmptyLinesInUnwrappedLines: true
 RemoveParentheses: Leave
 RemoveSemicolon: true
 RequiresClausePosition: OwnLine
 RequiresExpressionIndentation: OuterScope
 SeparateDefinitionBlocks: Always
 ShortNamespaceLines: 0
-#SkipMacroDefinitionBody: false
+SkipMacroDefinitionBody: false
 SortIncludes: true
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
@@ -138,7 +157,7 @@ SpacesInParens: Never
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 TabWidth: 4
-UseCRLF: false
 UseTab: Never
+#WrapNamespaceBodyWithEmptyLines: Never
 ...
 

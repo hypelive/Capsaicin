@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,12 +24,12 @@ THE SOFTWARE.
 #include "auto_exposure/auto_exposure.h"
 #include "bloom/bloom.h"
 #include "combine/combine.h"
+#include "fsr/fsr.h"
 #include "gi1/gi1.h"
 #include "lens/lens.h"
 #include "renderer.h"
 #include "skybox/skybox.h"
 #include "ssgi/ssgi.h"
-#include "taa/taa.h"
 #include "tone_mapping/tone_mapping.h"
 #include "visibility_buffer/visibility_buffer.h"
 
@@ -41,10 +41,11 @@ class GI1Renderer final
     , RendererFactory::Registrar<GI1Renderer>
 {
 public:
-    static constexpr std::string_view Name = "GI-1.1.1";
+    static constexpr std::string_view Name = "GI-1.2";
 
     /** Default constructor. */
-    GI1Renderer() noexcept {};
+    GI1Renderer() noexcept // NOLINT(modernize-use-equals-default, hicpp-use-equals-default)
+    {}
 
     /**
      * Sets up the required render techniques.
@@ -62,7 +63,7 @@ public:
         render_techniques.emplace_back(std::make_unique<Atmosphere>());
         render_techniques.emplace_back(std::make_unique<Skybox>());
         render_techniques.emplace_back(std::make_unique<Combine>());
-        render_techniques.emplace_back(std::make_unique<TAA>());
+        render_techniques.emplace_back(std::make_unique<FSR>());
         render_techniques.emplace_back(std::make_unique<AutoExposure>());
         render_techniques.emplace_back(std::make_unique<Bloom>());
         render_techniques.emplace_back(std::make_unique<ToneMapping>());

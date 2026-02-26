@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -131,13 +131,16 @@ ColorGrading::RenderOptions ColorGrading::convertOptions(RenderOptionList const 
 SharedTextureList ColorGrading::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
-    textures.push_back({"ColorScaled", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Optional});
+    textures.push_back({.name = "Color", .access = SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "ColorScaled",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::OptionalDiscard});
     return textures;
 }
 
 bool ColorGrading::init(CapsaicinInternal const &capsaicin) noexcept
 {
+    options_ = convertOptions(capsaicin.getOptions());
     if (options_.color_grading_enable)
     {
         if (!lut_buffer_ && (!options_.color_grading_file.empty() && lut_buffer_user_selected))
@@ -162,7 +165,7 @@ bool ColorGrading::init(CapsaicinInternal const &capsaicin) noexcept
 
 void ColorGrading::render(CapsaicinInternal &capsaicin) noexcept
 {
-    auto const options = convertOptions(capsaicin.getOptions());
+    auto options = convertOptions(capsaicin.getOptions());
 
     if (!options.color_grading_enable)
     {
@@ -170,13 +173,13 @@ void ColorGrading::render(CapsaicinInternal &capsaicin) noexcept
         {
             // Destroy resources when not being used
             terminate();
-            options_.color_grading_enable = false;
             if (!lut_buffer_user_selected)
             {
-                options_.color_grading_file = "";
-                capsaicin.setOption("color_grading_file", options_.color_grading_file);
+                options.color_grading_file = "";
+                capsaicin.setOption("color_grading_file", options.color_grading_file);
             }
         }
+        options_ = options;
         return;
     }
 

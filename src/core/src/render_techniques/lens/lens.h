@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -45,7 +45,7 @@ public:
     struct RenderOptions
     {
         bool  lens_chromatic_enable    = false; /**< Enable chromatic aberration */
-        bool  lens_vignette_enable     = false; /**< Enable vignette */
+        bool  lens_vignette_enable     = true;  /**< Enable vignette */
         bool  lens_film_grain_enable   = false; /**< Enable film grain */
         float lens_chromatic_intensity = 0.4F;  /**< Chromatic Aberration intensity */
         float lens_vignette_intensity  = 0.3F;  /**< Vignette intensity */

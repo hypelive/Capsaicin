@@ -1,5 +1,5 @@
-gtest/
-cli11/
-nlohmann_json/
-yaml-cpp/
-meshoptimizer/
+# ignore everything of the base directory
+/*
+# except for these
+!/AmdDxExt
+!/gfx

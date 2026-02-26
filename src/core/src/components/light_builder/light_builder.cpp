@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,13 @@ THE SOFTWARE.
 #include "capsaicin_internal.h"
 #include "hash_reduce.h"
 #include "light_builder_shared.h"
+#include "lights/lights_shared.h"
 #include "render_technique.h"
+
+#include <algorithm>
+#include <numeric>
+
+using namespace std;
 
 namespace Capsaicin
 {
@@ -50,7 +56,7 @@ RenderOptionList LightBuilder::getRenderOptions() noexcept
     newOptions.emplace(RENDER_OPTION_MAKE(delta_light_enable, options));
     newOptions.emplace(RENDER_OPTION_MAKE(area_light_enable, options));
     newOptions.emplace(RENDER_OPTION_MAKE(environment_light_enable, options));
-    newOptions.emplace(RENDER_OPTION_MAKE(environment_light_cosine_enable, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(environment_sampling_mode, options));
     newOptions.emplace(RENDER_OPTION_MAKE(low_emission_area_lights_disable, options));
     newOptions.emplace(RENDER_OPTION_MAKE(low_emission_threshold, options));
     return newOptions;
@@ -62,7 +68,7 @@ LightBuilder::RenderOptions LightBuilder::convertOptions(RenderOptionList const 
     RENDER_OPTION_GET(delta_light_enable, newOptions, options)
     RENDER_OPTION_GET(area_light_enable, newOptions, options)
     RENDER_OPTION_GET(environment_light_enable, newOptions, options)
-    RENDER_OPTION_GET(environment_light_cosine_enable, newOptions, options)
+    RENDER_OPTION_GET(environment_sampling_mode, newOptions, options)
     RENDER_OPTION_GET(low_emission_area_lights_disable, newOptions, options)
     RENDER_OPTION_GET(low_emission_threshold, newOptions, options)
     return newOptions;
@@ -91,8 +97,27 @@ bool LightBuilder::init(CapsaicinInternal const &capsaicin) noexcept
     // Setup initial light counts for current scene
     auto const scene = capsaicin.getScene();
     lightHash = HashReduce(gfxSceneGetObjects<GfxLight>(scene), gfxSceneGetObjectCount<GfxLight>(scene));
-    deltaLightCount = (options.delta_light_enable) ? gfxSceneGetObjectCount<GfxLight>(scene) : 0;
-    areaLightTotal  = 0;
+    uint const deltaLightCount = (options.delta_light_enable) ? gfxSceneGetObjectCount<GfxLight>(scene) : 0;
+    GfxLight const *lights     = gfxSceneGetObjects<GfxLight>(scene);
+    directionalLightCount      = 0;
+    pointLightCount            = 0;
+    spotLightCount             = 0;
+    for (uint32_t i = 0; i < deltaLightCount; ++i)
+    {
+        if (lights[i].type == kGfxLightType_Directional)
+        {
+            ++directionalLightCount;
+        }
+        if (lights[i].type == kGfxLightType_Point)
+        {
+            ++pointLightCount;
+        }
+        if (lights[i].type == kGfxLightType_Spot)
+        {
+            ++spotLightCount;
+        }
+    }
+    areaLightTotal = 0;
     for (uint32_t i = 0; i < gfxSceneGetObjectCount<GfxInstance>(scene); ++i)
     {
         auto const &instance = gfxSceneGetObjects<GfxInstance>(scene)[i];
@@ -127,16 +152,17 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
         && (capsaicin.getMeshesUpdated() || (areaLightTotal > 0 && capsaicin.getTransformsUpdated())))
     {
         // Need to reset area light count as it won't get counted while area lights are disabled
-        areaLightTotal = std::numeric_limits<uint32_t>::max();
+        areaLightTotal = numeric_limits<uint32_t>::max();
     }
 
     auto const hasPreviousLightBuffer = capsaicin.hasSharedBuffer("PrevLightBuffer");
     auto const environmentMap         = capsaicin.getEnvironmentBuffer();
     lightsUpdated                     = false;
-    auto const oldDeltaLightCount     = deltaLightCount;
-    auto const oldAreaLightCount      = areaLightCount;
-    auto const oldEnvironmentMapCount = environmentMapCount;
-    deltaLightCount     = (optionsNew.delta_light_enable) ? gfxSceneGetObjectCount<GfxLight>(scene) : 0;
+    uint const oldDeltaLightCount     = pointLightCount + spotLightCount + directionalLightCount;
+    uint const oldAreaLightCount      = areaLightCount;
+    uint const oldEnvironmentMapCount = environmentMapCount;
+    uint const deltaLightCount =
+        (optionsNew.delta_light_enable) ? gfxSceneGetObjectCount<GfxLight>(scene) : 0;
     areaLightCount      = (optionsNew.area_light_enable) ? areaLightTotal : 0;
     environmentMapCount = (optionsNew.environment_light_enable && !!environmentMap) ? 1 : 0;
 
@@ -148,7 +174,7 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
     bool const areaLightUpdated =
         optionsNew.area_light_enable
         && (capsaicin.getMeshesUpdated() || capsaicin.getInstancesUpdated() || capsaicin.getFrameIndex() == 0
-            || areaLightTotal == std::numeric_limits<uint32_t>::max()
+            || areaLightTotal == numeric_limits<uint32_t>::max()
             || (areaLightCount > 0 && capsaicin.getTransformsUpdated())
             || options.low_emission_area_lights_disable != optionsNew.low_emission_area_lights_disable
             || cullLowChanged);
@@ -169,20 +195,37 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
             // the bits stored in each light struct based on the type of light stored. All delta lights
             // (point/spot/direction) are added to the list directly on the CPU at the beginning of the
             // list.
-            std::vector<Light> allLightData;
+            vector<Light> allLightData;
 
             // Add the environment map to the light list
             // Note: other parts require that the environment map is always first in the list
             if (environmentMapCount != 0)
             {
                 Light const light =
-                    MakeEnvironmentLight(environmentMap.getWidth(), environmentMap.getHeight());
+                    MakeEnvironmentLight(environmentMap.getMipLevels(), environmentMap.getWidth());
                 allLightData.push_back(light);
             }
 
             // Add delta lights to the list
             // Lights are added by type to improve gpu performance
             GfxLight const *lights = gfxSceneGetObjects<GfxLight>(scene);
+
+            // Infinite lights are always added first such that directional lights appear after environment
+            // lights as this is useful for some renderers
+            directionalLightCount = 0;
+            for (uint32_t i = 0; i < deltaLightCount; ++i)
+            {
+                if (lights[i].type == kGfxLightType_Directional)
+                {
+                    // Create new directional light
+                    Light const light = MakeDirectionalLight(
+                        lights[i].color * lights[i].intensity, lights[i].direction, lights[i].range);
+                    allLightData.push_back(light);
+                    ++directionalLightCount;
+                }
+            }
+
+            pointLightCount = 0;
             for (uint32_t i = 0; i < deltaLightCount; ++i)
             {
                 if (lights[i].type == kGfxLightType_Point)
@@ -191,27 +234,21 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
                     Light const light = MakePointLight(
                         lights[i].color * lights[i].intensity, lights[i].position, lights[i].range);
                     allLightData.push_back(light);
+                    ++pointLightCount;
                 }
             }
+
+            spotLightCount = 0;
             for (uint32_t i = 0; i < deltaLightCount; ++i)
             {
                 if (lights[i].type == kGfxLightType_Spot)
                 {
                     // Create new spotlight
                     Light const light = MakeSpotLight(lights[i].color * lights[i].intensity,
-                        lights[i].position, lights[i].range, normalize(lights[i].direction),
-                        lights[i].outer_cone_angle, lights[i].inner_cone_angle);
+                        lights[i].position, lights[i].range, lights[i].direction, lights[i].outer_cone_angle,
+                        lights[i].inner_cone_angle);
                     allLightData.push_back(light);
-                }
-            }
-            for (uint32_t i = 0; i < deltaLightCount; ++i)
-            {
-                if (lights[i].type == kGfxLightType_Directional)
-                {
-                    // Create new directional light
-                    Light const light = MakeDirectionalLight(lights[i].color * lights[i].intensity,
-                        normalize(lights[i].direction), lights[i].range);
-                    allLightData.push_back(light);
+                    ++spotLightCount;
                 }
             }
 
@@ -227,7 +264,7 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
                 // values can then be offset by the primitiveID to get the exact light location. As many
                 // instances are going to contain zero valid emissive meshes the buffer is sparsely
                 // populated.
-                std::vector<uint32_t> lightInstancePrimitiveOffset;
+                vector<uint32_t> lightInstancePrimitiveOffset;
                 areaLightTotal              = 0;
                 areaLightCount              = 0;
                 auto const areaLightStartID = static_cast<uint32_t>(allLightData.size());
@@ -282,7 +319,7 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
                 // Swap current buffer with previous buffer only if it makes sense to. In the case of light
                 // IDs being invalidated the old buffer contains useless info anyway.
                 // Swapping is faster so just don't look at the constant cast
-                std::swap(lightBuffer, const_cast<GfxBuffer &>(capsaicin.getSharedBuffer("PrevLightBuffer")));
+                swap(lightBuffer, const_cast<GfxBuffer &>(capsaicin.getSharedBuffer("PrevLightBuffer")));
             }
             if (!allLightData.empty())
             {
@@ -304,8 +341,8 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
             TimedSection const timedSection(*this, "GatherAreaLights");
 
             // Create a list of valid instance|meshlet pairs that contain emissive meshlets.
-            std::vector<DrawData> drawData;
-            uint32_t const        instanceCount = gfxSceneGetObjectCount<GfxInstance>(capsaicin.getScene());
+            vector<DrawData> drawData;
+            uint32_t const   instanceCount = gfxSceneGetObjectCount<GfxInstance>(capsaicin.getScene());
             for (uint32_t i = 0; i < instanceCount; ++i)
             {
                 if (GfxConstRef const instanceRef = gfxSceneGetObjectHandle<GfxInstance>(scene, i);
@@ -378,10 +415,10 @@ void LightBuilder::run(CapsaicinInternal &capsaicin) noexcept
     }
     lightsUpdatedBack = lightsUpdated;
     // Check change in settings last so that areaLightCount has a chance to be correctly calculated
-    lightSettingsChanged =
-        oldEnvironmentMapCount != environmentMapCount || (oldAreaLightCount > 0) != (areaLightCount > 0)
-        || (oldDeltaLightCount > 0) != (deltaLightCount > 0)
-        || options.environment_light_cosine_enable != optionsNew.environment_light_cosine_enable;
+    lightSettingsChanged = oldEnvironmentMapCount != environmentMapCount
+                        || (oldAreaLightCount > 0) != (areaLightCount > 0)
+                        || (oldDeltaLightCount > 0) != (deltaLightCount > 0)
+                        || options.environment_sampling_mode != optionsNew.environment_sampling_mode;
     options = optionsNew;
 }
 
@@ -402,46 +439,50 @@ void LightBuilder::terminate() noexcept
 
 void LightBuilder::renderGUI(CapsaicinInternal &capsaicin) const noexcept
 {
-    if (areaLightTotal == 0)
+    if (areaLightTotal > 0)
     {
-        ImGui::BeginDisabled();
+        auto enableAreaLights = capsaicin.getOption<bool>("area_light_enable");
+        if (ImGui::Checkbox("Enable Area Lights", &enableAreaLights))
+        {
+            capsaicin.setOption<bool>("area_light_enable", enableAreaLights);
+        }
+        auto lowEmissionLights = capsaicin.getOption<bool>("low_emission_area_lights_disable");
+        if (ImGui::Checkbox("Cull Low Emission Area Lights", &lowEmissionLights))
+        {
+            capsaicin.setOption<bool>("low_emission_area_lights_disable", lowEmissionLights);
+        }
+        if (lowEmissionLights)
+        {
+            auto lowEmissionThreshold = capsaicin.getOption<float>("low_emission_threshold");
+            if (ImGui::SliderFloat("Low Emission Threshold", &lowEmissionThreshold, 0.0F, 100.0F))
+            {
+                capsaicin.setOption<float>("low_emission_threshold", lowEmissionThreshold);
+            }
+        }
     }
-    ImGui::Checkbox("Enable Area Lights", &capsaicin.getOption<bool>("area_light_enable"));
-    ImGui::Checkbox(
-        "Cull Low Emission Area Lights", &capsaicin.getOption<bool>("low_emission_area_lights_disable"));
-    if (capsaicin.getOption<bool>("low_emission_area_lights_disable"))
+
+    if (gfxSceneGetObjectCount<GfxLight>(capsaicin.getScene()) > 0)
     {
-        ImGui::SliderFloat(
-            "Low Emission Threshold", &capsaicin.getOption<float>("low_emission_threshold"), 0.0F, 100.0F);
+        auto enableDeltaLights = capsaicin.getOption<bool>("delta_light_enable");
+        if (ImGui::Checkbox("Enable Delta Lights", &enableDeltaLights))
+        {
+            capsaicin.setOption<bool>("delta_light_enable", enableDeltaLights);
+        }
     }
-    if (areaLightTotal == 0)
+
+    if (auto const environmentMap = capsaicin.getEnvironmentBuffer(); !!environmentMap)
     {
-        ImGui::EndDisabled();
-    }
-    auto const deltaLightTotal = gfxSceneGetObjectCount<GfxLight>(capsaicin.getScene());
-    if (deltaLightTotal == 0)
-    {
-        ImGui::BeginDisabled();
-    }
-    ImGui::Checkbox("Enable Delta Lights", &capsaicin.getOption<bool>("delta_light_enable"));
-    if (deltaLightTotal == 0)
-    {
-        ImGui::EndDisabled();
-    }
-    bool const environmentMapTotal = !!capsaicin.getEnvironmentBuffer();
-    if (!environmentMapTotal)
-    {
-        ImGui::BeginDisabled();
-    }
-    ImGui::Checkbox("Enable Environment Lights", &capsaicin.getOption<bool>("environment_light_enable"));
-    if (environmentMapTotal)
-    {
-        ImGui::Checkbox("Enable Cosine Sampling Environment Lights",
-            &capsaicin.getOption<bool>("environment_light_cosine_enable"));
-    }
-    if (!environmentMapTotal)
-    {
-        ImGui::EndDisabled();
+        auto environmentEnable = capsaicin.getOption<bool>("environment_light_enable");
+        if (ImGui::Checkbox("Enable Environment Lights", &environmentEnable))
+        {
+            capsaicin.setOption<bool>("environment_light_enable", environmentEnable);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::Text("Env map size : %ux%u", environmentMap.getWidth(), environmentMap.getHeight());
+            ImGui::EndTooltip();
+        }
     }
 }
 
@@ -450,11 +491,12 @@ bool LightBuilder::needsRecompile([[maybe_unused]] CapsaicinInternal const &caps
     return getLightSettingsUpdated();
 }
 
-std::vector<std::string> LightBuilder::getShaderDefines(
+vector<string> LightBuilder::getShaderDefines(
     [[maybe_unused]] CapsaicinInternal const &capsaicin) const noexcept
 {
-    std::vector<std::string> baseDefines;
-    if (deltaLightCount == 0)
+    vector<string> baseDefines;
+
+    if ((pointLightCount + spotLightCount + directionalLightCount) == 0)
     {
         baseDefines.emplace_back("DISABLE_DELTA_LIGHTS");
     }
@@ -466,9 +508,15 @@ std::vector<std::string> LightBuilder::getShaderDefines(
     {
         baseDefines.emplace_back("DISABLE_ENVIRONMENT_LIGHTS");
     }
-    if (options.environment_light_cosine_enable)
+    if (options.environment_sampling_mode
+        == static_cast<uint8_t>(RenderOptions::EnvironmentSamplingMode::Cosine))
     {
         baseDefines.emplace_back("ENABLE_COSINE_ENVIRONMENT_SAMPLING");
+    }
+    if (options.environment_sampling_mode
+        == static_cast<uint8_t>(RenderOptions::EnvironmentSamplingMode::Importance))
+    {
+        baseDefines.emplace_back("ENABLE_ENVIRONMENT_IMPORTANCE_SAMPLING");
     }
     if (capsaicin.hasSharedBuffer("PrevLightBuffer"))
     {
@@ -495,14 +543,34 @@ uint32_t LightBuilder::getAreaLightCount() const
     return areaLightCount;
 }
 
+uint32_t LightBuilder::getPointLightCount() const
+{
+    return pointLightCount;
+}
+
+uint32_t LightBuilder::getSpotLightCount() const
+{
+    return spotLightCount;
+}
+
+uint32_t LightBuilder::getDirectionalLightCount() const
+{
+    return directionalLightCount;
+}
+
 uint32_t LightBuilder::getDeltaLightCount() const
 {
-    return deltaLightCount;
+    return pointLightCount + spotLightCount + directionalLightCount;
+}
+
+uint32_t LightBuilder::getEnvironmentLightCount() const
+{
+    return environmentMapCount;
 }
 
 uint32_t LightBuilder::getLightCount() const
 {
-    return areaLightCount + deltaLightCount + environmentMapCount;
+    return areaLightCount + pointLightCount + spotLightCount + directionalLightCount + environmentMapCount;
 }
 
 bool LightBuilder::getLightsUpdated() const

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -71,12 +71,12 @@ float sampleLightVolume(Light selectedLight, float3 minBB, float3 extent)
         LightArea light = MakeLightArea(selectedLight);
 
         // Get light position at approximate midpoint
-        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, (1.0f / 3.0f).xx);
+        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, 0.3333333333333f.xx);
 
         float3 emissivity = light.emissivity.xyz;
 #       ifdef THRESHOLD_RADIANCE
         // Quick cull based on range of sphere falloff
-        float3 extentCentre = extent * 0.5f.xxx;
+        float3 extentCentre = extent * 0.5f;
         float3 centre = minBB + extentCentre;
         float radiusSqr = dot(extentCentre, extentCentre);
         float radius = sqrt(radiusSqr);
@@ -100,7 +100,9 @@ float sampleLightVolume(Light selectedLight, float3 minBB, float3 extent)
             float lod = 0.5f * log2(areaUV);
 
             float2 uv = interpolate(light.uv0, light.uv1, light.uv2, 0.3333333333333f.xx);
-            emissivity *= g_TextureMaps[NonUniformResourceIndex(emissivityTex)].SampleLevel(g_TextureSampler, uv, lod).xyz;
+            float4 textureValue = g_TextureMaps[NonUniformResourceIndex(emissivityTex)].SampleLevel(g_TextureSampler, uv, lod);
+            emissivity *= textureValue.xyz;
+            emissivity *= textureValue.w;
         }
 
         // Calculate lights surface normal vector
@@ -109,48 +111,56 @@ float sampleLightVolume(Light selectedLight, float3 minBB, float3 extent)
         float3 lightCross = cross(edge1, edge2);
         // Calculate surface area of triangle
         float lightNormalLength = length(lightCross);
-        float3 lightNormal = lightCross / lightNormalLength.xxx;
+        float3 lightNormal = lightCross / lightNormalLength;
         float lightArea = 0.5f * lightNormalLength;
 
 #       ifdef LIGHT_SAMPLE_VOLUME_CENTROID
         // Evaluate radiance at cell centre
 #           ifndef THRESHOLD_RADIANCE
-        float3 centre = minBB + (extent * 0.5f.xxx);
+        float3 centre = minBB + (extent * 0.5f);
 #           endif
         float3 lightVector = centre - lightPosition;
         float lightLengthSqr = lengthSqr(lightVector);
-        float pdf = saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr).xxx))) * lightArea;
-        pdf = pdf / (lightLengthSqr + FLT_EPSILON);
-        radiance = emissivity * pdf;
+        float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        float pdf = saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
+        radiance = emissivity * (lightArea * pdf);
 #       else
         // Contribution is emission scaled by surface area converted to solid angle
         // The light is sampled at all 8 corners of the AABB and then interpolated to fill in the internal volume
         float3 maxBB = minBB + extent;
         float3 lightVector = minBB - lightPosition;
-        float lightLengthSqr = rcp(lengthSqr(lightVector));
-        float pdf = saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        float lightLengthSqr = lengthSqr(lightVector);
+        float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        float pdf = saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(minBB.x, minBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(minBB.x, maxBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(minBB.x, maxBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(maxBB.x, minBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(maxBB.x, minBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = float3(maxBB.x, maxBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
         lightVector = maxBB - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        pdf += saturate(abs(dot(lightNormal, lightVector * sqrt(lightLengthSqr).xxx))) * lightLengthSqr;
-        radiance = (emissivity * (lightArea * 0.125f)) * pdf;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        pdf += saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
+        radiance = emissivity * (lightArea * 0.125f * pdf);
 #       endif // LIGHT_SAMPLE_VOLUME_CENTROID
     }
 #       if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
@@ -164,75 +174,123 @@ float sampleLightVolume(Light selectedLight, float3 minBB, float3 extent)
         LightPoint light = MakeLightPoint(selectedLight);
 
         // Quick cull based on range of sphere
-        float3 extentCentre = extent * 0.5f.xxx;
+        float3 extentCentre = extent * 0.5f;
         float3 centre = minBB + extentCentre;
-        float radiusSqr = dot(extentCentre, extentCentre);
+        float radiusSqr = lengthSqr(extentCentre);
         float radius = sqrt(radiusSqr);
         float3 lightDirection = centre - light.position;
-        if (length(lightDirection) > (radius + light.range))
+        float dirLengthSqr = lengthSqr(lightDirection);
+        float combinedRadius = radius + light.range;
+        if (dirLengthSqr > (combinedRadius * combinedRadius))
         {
             return 0.0f;
         }
+
+#       ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+        // Get sphere values for overlap test
+        float radius2 = light.range;
+        float dirDistSqr = dirLengthSqr;
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
 
         if (lightType == kLight_Spot)
         {
             // Check if spot cone intersects current cell
             // Uses fast cone-sphere test (Hale)
             bool intersect = false;
-            float3 coneNormal = selectedLight.v2.xyz;
-            float sinAngle = selectedLight.v2.w;
-            float tanAngleSqPlusOne = selectedLight.v3.z;
-            if (dot(lightDirection + (coneNormal * sinAngle * radius), coneNormal) < 0.0f)
+            const float3 coneNegNormal = selectedLight.v2.xyz;
+            const float sinAngle = selectedLight.v2.w;
+            const float tanAngle = selectedLight.v3.z;
+            const float tanAngleSqPlusOne = squared(tanAngle) + 1.0f;
+            float offset = radius * sinAngle;
+            if (dot(lightDirection + (coneNegNormal * offset), coneNegNormal) < 0.0f)
             {
-                float3 cd = sinAngle * lightDirection - coneNormal * radius;
-                const float lenA = dot(cd, coneNormal);
-                intersect = dot(cd, cd) <= lenA * lenA * tanAngleSqPlusOne;
+                float3 c = (lightDirection * sinAngle) - (coneNegNormal * radius);
+                float lenA = dot(c, coneNegNormal);
+                intersect = (lengthSqr(c) <= squared(lenA) * tanAngleSqPlusOne);
+                offset = dot(lightDirection, coneNegNormal);
             }
             else
             {
-                intersect = dot(lightDirection, lightDirection) <= radiusSqr;
+                intersect = (dirLengthSqr <= radiusSqr);
             }
             if (!intersect)
             {
                 return 0.0f;
             }
+#       ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+            // Get new sphere values for approximate overlap test
+            radius2 = squared(offset) * tanAngleSqPlusOne;
+            float3 compareDir = lightDirection + (coneNegNormal * offset);
+            dirDistSqr = lengthSqr(compareDir);
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
         }
+
+#       ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+        // Check the approximate overlap of the light and the cell
+        float overlap = 1.0f;
+        float radiusDiff = radius - radius2;
+        float radiusDiffSqr = squared(radiusDiff);
+        if (dirDistSqr > radiusDiffSqr)
+        {
+            // Here we treat the cell as a sphere and check the proportion of the cell sphere that overlaps
+            //  with the light sphere. In the case of a spot-light we create a sphere centered on the spots cone
+            //  direction perpendicular to the shortest path between the cell sphere center and the cones light direction vector.
+            float dist = sqrt(dirDistSqr);
+            float radiusCombined = radius + radius2;
+            overlap = squared(radiusCombined - dist) * (dirDistSqr + (2.0f * dist * radiusCombined) - (3.0f * radiusDiffSqr));
+            overlap /= (16.0f * dist * radiusSqr * radius);
+        }
+        else if (radius > radius2)
+        {
+            // This is the case where the light is entirely within the sphere. The overlap is then the volume of the
+            //  light with respect to the volume of the cell.
+            float radius3 = rcp(radiusSqr * radius);
+            if (lightType == kLight_Spot)
+            {
+                // The volume of the cone must be clipped against the bounds of the cell. We approximate this by
+                //  capping the light cone roughly where it intersects the cell sphere. We then subtract the volume
+                //  of the cone near the apex that is not contained within the cell (again this is roughly clipped
+                //  against the cell sphere)
+                float3 coneNegNormal = selectedLight.v2.xyz;
+                float const tanAngle = selectedLight.v3.z;
+                float tc = dot(lightDirection, coneNegNormal);
+                float d2 = dirLengthSqr - squared(tc);
+                float th = sqrt(radiusSqr - d2);
+                overlap = tanAngle * abs(tc) * th * radius3;
+            }
+            else
+            {
+                overlap = radius3 * (squared(radius2) * radius2);
+            }
+        }
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
 
 #       ifdef LIGHT_SAMPLE_VOLUME_CENTROID
         // Evaluate radiance at cell centre
-        float dist = distance(light.position, centre);
-        float distMod = dist / light.range;
-        float rad = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        radiance = light.intensity * rad.xxx;
+        float distSqr = distanceSqr(light.position, centre);
+        float rad = saturate(1.0f - (squared(distSqr) / squared(squared(light.range)))) / (0.0001f + distSqr);
+        radiance = light.intensity * rad;
 #       else // LIGHT_SAMPLE_VOLUME_CENTROID
         // For each corner of the cell evaluate the radiance
         float3 maxBB = minBB + extent;
-        float recipRange = 1.0f / light.range;
-        float dist = distance(light.position, minBB);
-        float distMod = dist * recipRange;
-        float rad = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(minBB.x, minBB.y, maxBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(minBB.x, maxBB.y, minBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(minBB.x, maxBB.y, maxBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(maxBB.x, minBB.y, minBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(maxBB.x, minBB.y, maxBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, float3(maxBB.x, maxBB.y, minBB.z));
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        dist = distance(light.position, maxBB);
-        distMod = dist * recipRange;
-        rad += saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        radiance = light.intensity * (rad * 0.125f).xxx;
+        float recipRange4 = rcp(squared(squared(light.range)));
+        float distSqr = distanceSqr(light.position, minBB);
+        float rad = saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(minBB.x, minBB.y, maxBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(minBB.x, maxBB.y, minBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(minBB.x, maxBB.y, maxBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(maxBB.x, minBB.y, minBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(maxBB.x, minBB.y, maxBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, float3(maxBB.x, maxBB.y, minBB.z));
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        distSqr = distanceSqr(light.position, maxBB);
+        rad += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr);
+        radiance = light.intensity * (rad * 0.125f);
 #       endif // LIGHT_SAMPLE_VOLUME_CENTROID
     }
     else
@@ -259,12 +317,12 @@ float sampleLightVolume(Light selectedLight, float3 minBB, float3 extent)
         // Environment light is constant at all points so just sample the environment map at
         //   lower mip levels to get combined contribution
         // Due to use of cube map all 6 sides must be individually sampled
-        radiance = g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, 1.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, -1.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 1.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, -1.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(1.0f, 0.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(-1.0f, 0.0f, 0.0f), light.lods).xyz;
+        radiance = g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, 1.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, -1.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 1.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, -1.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(1.0f, 0.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(-1.0f, 0.0f, 0.0f), light.mips).xyz;
         radiance *= FOUR_PI / 6.0f;
     }
 #   endif // DISABLE_ENVIRONMENT_LIGHTS
@@ -299,11 +357,11 @@ float sampleLightVolumeNormal(Light selectedLight, float3 minBB, float3 extent, 
         LightArea light = MakeLightArea(selectedLight);
 
         // Get light position at approximate midpoint
-        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, (1.0f / 3.0f).xx);
+        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, 0.3333333333333f.xx);
 
         // Check if inside AABB
         float3 maxBB = minBB + extent;
-        float3 extentCentre = extent * 0.5f.xxx;
+        float3 extentCentre = extent * 0.5f;
         float3 centre = minBB + extentCentre;
         bool insideAABB = all(lightPosition >= minBB) && all(lightPosition <= maxBB);
 
@@ -350,52 +408,60 @@ float sampleLightVolumeNormal(Light selectedLight, float3 minBB, float3 extent, 
         float3 lightCross = cross(edge1, edge2);
         // Calculate surface area of triangle
         float lightNormalLength = length(lightCross);
-        float3 lightNormal = lightCross / lightNormalLength.xxx;
+        float3 lightNormal = lightCross / lightNormalLength;
         float lightArea = 0.5f * lightNormalLength;
 
 #       ifdef LIGHT_SAMPLE_VOLUME_CENTROID
         // Evaluate radiance at cell centre
         float3 lightVector = centre - lightPosition;
         float lightLengthSqr = lengthSqr(lightVector);
-        float pdf = saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr).xxx))) * lightArea;
-        pdf = pdf / (lightLengthSqr + FLT_EPSILON);
-        radiance = emissivity * pdf;
+        float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        float pdf = saturate(abs(dot(lightNormal, lightVector * rsqrt(lightLengthSqr)))) * recipLengthSqr;
+        radiance = emissivity * (lightArea * pdf);
 #       else // LIGHT_SAMPLE_VOLUME_CENTROID
         // Contribution is emission scaled by surface area converted to solid angle
         // The light is sampled at all 8 corners of the AABB and then interpolated to fill in the internal volume
         float3 lightVector = minBB - lightPosition;
-        float lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        float pdf = saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        float lightLengthSqr = lengthSqr(lightVector);
+        float recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        float pdf = saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(minBB.x, minBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(minBB.x, maxBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(minBB.x, maxBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, minBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, minBB.y, maxBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, maxBB.y, minBB.z) - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = maxBB - lightPosition;
-        lightLengthSqr = rcp(lengthSqr(lightVector));
-        lightVector *= sqrt(lightLengthSqr).xxx;
-        pdf += saturate(abs(dot(lightNormal, lightVector))) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
-        radiance = (emissivity * (lightArea * 0.125f)) * pdf;
+        lightLengthSqr = lengthSqr(lightVector);
+        recipLengthSqr = (lightLengthSqr != 0.0F) ? rcp(lightLengthSqr) : 0.0F;
+        lightVector *= rsqrt(lightLengthSqr);
+        pdf += saturate(abs(dot(lightNormal, lightVector))) * recipLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        radiance = emissivity * (lightArea * 0.125f * pdf);
 #       endif // LIGHT_SAMPLE_VOLUME_CENTROID
     }
 #       if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
@@ -410,121 +476,147 @@ float sampleLightVolumeNormal(Light selectedLight, float3 minBB, float3 extent, 
 
         // Check if inside AABB
         float3 maxBB = minBB + extent;
-        float3 extentCentre = extent * 0.5f.xxx;
+        float3 extentCentre = extent * 0.5f;
         float3 centre = minBB + extentCentre;
         const bool insideAABB = all(light.position >= minBB) && all(light.position <= maxBB);
 
-        // Cull by visibility by checking if triangle is above plane
+        // Cull by visibility by checking if light is above plane
         if (!insideAABB && dot(light.position - centre, normal) <= -0.7071f)
         {
             return 0.0f;
         }
 
         // Quick cull based on range of sphere
-        float radiusSqr = dot(extentCentre, extentCentre);
+        float radiusSqr = lengthSqr(extentCentre);
         float radius = sqrt(radiusSqr);
         float3 lightDirection = centre - light.position;
-        if (length(lightDirection) > (radius + light.range))
+        float dirLengthSqr = lengthSqr(lightDirection);
+        float combinedRadius = radius + light.range;
+        if (dirLengthSqr > (combinedRadius * combinedRadius))
         {
             return 0.0f;
         }
+
+#        ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+        // Get sphere values for overlap test
+        float radius2 = light.range;
+        float dirDistSqr = dirLengthSqr;
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
 
         if (lightType == kLight_Spot)
         {
             // Check if spot cone intersects current cell
             // Uses fast cone-sphere test (Hale)
             bool intersect = false;
-            float3 coneNormal = selectedLight.v2.xyz;
-            float sinAngle = selectedLight.v2.w;
-            float tanAngleSqPlusOne = selectedLight.v3.z;
-
-            // Fast check to cull lights based on cell normal
-            if (dot(coneNormal, normal) <= -0.7071f)
+            const float3 coneNegNormal = selectedLight.v2.xyz;
+            const float sinAngle = selectedLight.v2.w;
+            const float tanAngle = selectedLight.v3.z;
+            const float tanAngleSqPlusOne = squared(tanAngle) + 1.0f;
+            float offset = radius * sinAngle;
+            if (dot(lightDirection + (coneNegNormal * offset), coneNegNormal) < 0.0f)
             {
-                return 0.0f;
-            }
-
-            if (dot(lightDirection + (coneNormal * sinAngle * radius), coneNormal) < 0.0f)
-            {
-                float3 cd = sinAngle * lightDirection - coneNormal * radius;
-                const float lenA = dot(cd, coneNormal);
-                intersect = dot(cd, cd) <= lenA * lenA * tanAngleSqPlusOne;
+                float3 c = (lightDirection * sinAngle) - (coneNegNormal * radius);
+                float lenA = dot(c, coneNegNormal);
+                intersect = (lengthSqr(c) <= squared(lenA) * tanAngleSqPlusOne);
+                offset = dot(lightDirection, coneNegNormal);
             }
             else
             {
-                intersect = dot(lightDirection, lightDirection) <= radiusSqr;
+                intersect = (dirLengthSqr <= radiusSqr);
             }
             if (!intersect)
             {
                 return 0.0f;
             }
+#       ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+            // Get new sphere values for approximate overlap test
+            radius2 = squared(offset) * tanAngleSqPlusOne;
+            float3 compareDir = lightDirection + (coneNegNormal * offset);
+            dirDistSqr = lengthSqr(compareDir);
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
         }
+
+#       ifdef LIGHT_SAMPLE_VOLUME_OVERLAP
+        // Check the approximate overlap of the light and the cell
+        float overlap = 1.0f;
+        float radiusDiff = radius - radius2;
+        float radiusDiffSqr = squared(radiusDiff);
+        if (dirDistSqr > radiusDiffSqr)
+        {
+            // Here we treat the cell as a sphere and check the proportion of the cell sphere that overlaps
+            //  with the light sphere. In the case of a spot-light we create a sphere centered on the spots cone
+            //  direction perpendicular to the shortest path between the cell sphere center and the cones light direction vector.
+            float dist = sqrt(dirDistSqr);
+            float radiusCombined = radius + radius2;
+            overlap = squared(radiusCombined - dist) * (dirDistSqr + (2.0f * dist * radiusCombined) - (3.0f * radiusDiffSqr));
+            overlap /= (16.0f * dist * radiusSqr * radius);
+        }
+        else if (radius > radius2)
+        {
+            // This is the case where the light is entirely within the sphere. The overlap is then the volume of the
+            //  light with respect to the volume of the cell.
+            float radius3 = rcp(radiusSqr * radius);
+            if (lightType == kLight_Spot)
+            {
+                // The volume of the cone must be clipped against the bounds of the cell. We approximate this by
+                //  capping the light cone roughly where it intersects the cell sphere. We then subtract the volume
+                //  of the cone near the apex that is not contained within the cell (again this is roughly clipped
+                //  against the cell sphere)
+                float3 coneNegNormal = selectedLight.v2.xyz;
+                float const tanAngle = selectedLight.v3.z;
+                float tc = dot(lightDirection, coneNegNormal);
+                float d2 = dirLengthSqr - squared(tc);
+                float th = sqrt(radiusSqr - d2);
+                overlap = tanAngle * abs(tc) * th * radius3;
+            }
+            else
+            {
+                overlap = radius3 * (squared(radius2) * radius2);
+            }
+        }
+#       endif // LIGHT_SAMPLE_VOLUME_OVERLAP
 
 #       ifdef LIGHT_SAMPLE_VOLUME_CENTROID
         // Evaluate radiance at cell centre
-        float dist = distance(light.position, centre);
-        float distMod = dist / light.range;
-        float rad = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        radiance = light.intensity * rad.xxx;
+        float distSqr = distanceSqr(light.position, centre);
+        float rad = saturate(1.0f - (squared(distSqr) / squared(squared(light.range)))) / (0.0001f + distSqr);
+        radiance = light.intensity * rad;
 #       else // LIGHT_SAMPLE_VOLUME_CENTROID
         // For each corner of the cell evaluate the radiance
-        float recipRange = 1.0f / light.range;
+        float recipRange4 = rcp(squared(squared(light.range)));
         float3 lightVector = minBB - light.position;
-        float lightLengthSqr = lengthSqr(lightVector);
-        float dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        float distMod = dist * recipRange;
-        float pdf = saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        float distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        float pdf = saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        lightVector = float3(minBB.x, minBB.y, maxBB.z) - light.position;
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(minBB.x, maxBB.y, minBB.z) - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(minBB.x, maxBB.y, maxBB.z) - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, minBB.y, minBB.z) - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, minBB.y, maxBB.z) - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = float3(maxBB.x, maxBB.y, minBB.z) - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
         lightVector = maxBB - light.position;
-        lightLengthSqr = lengthSqr(lightVector);
-        dist = sqrt(lightLengthSqr);
-        lightLengthSqr = rcp(lightLengthSqr);
-        lightVector *= dist.xxx;
-        distMod = dist * recipRange;
-        pdf += saturate(1.0f - (distMod * distMod * distMod * distMod)) * lightLengthSqr * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
-        radiance = light.intensity * 0.125f * pdf;
+        distSqr = lengthSqr(lightVector);
+        lightVector *= rsqrt(distSqr);
+        pdf += saturate(1.0f - (squared(distSqr) * recipRange4)) / (0.0001f + distSqr) * (!insideAABB && dot(lightVector, normal) >= 0.7071f ? 0.0f : 1.0f);
+        radiance = light.intensity * (0.125f * pdf);
 #       endif // LIGHT_SAMPLE_VOLUME_CENTROID
     }
     else
@@ -561,17 +653,17 @@ float sampleLightVolumeNormal(Light selectedLight, float3 minBB, float3 extent, 
         float count = 0.0f;
         if (normal.z != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, normal.z), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, normal.z), light.mips).xyz;
             ++count;
         }
         if (normal.y != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, normal.y, 0.0f), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, normal.y, 0.0f), light.mips).xyz;
             ++count;
         }
         if (normal.x != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(normal.x, 0.0f, 0.0f), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(normal.x, 0.0f, 0.0f), light.mips).xyz;
             ++count;
         }
         radiance *= FOUR_PI / count;
@@ -605,7 +697,7 @@ float sampleLightPoint(Light selectedLight, float3 position)
         LightArea light = MakeLightArea(selectedLight);
 
         // Get light position at approximate midpoint
-        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, (1.0f / 3.0f).xx);
+        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, 0.3333333333333f.xx);
 
         float3 emissivity = light.emissivity.xyz;
         uint emissivityTex = asuint(light.emissivity.w);
@@ -629,16 +721,16 @@ float sampleLightPoint(Light selectedLight, float3 position)
         float3 lightCross = cross(edge1, edge2);
         // Calculate surface area of triangle
         float lightNormalLength = length(lightCross);
-        float3 lightNormal = lightCross / lightNormalLength.xxx;
+        float3 lightNormal = lightCross / lightNormalLength;
         float lightArea = 0.5f * lightNormalLength;
 
         // Evaluate radiance at specified point
         float3 lightVector = position - lightPosition;
         float lightLengthSqr = lengthSqr(lightVector);
-        lightVector *= rsqrt(lightLengthSqr).xxx;
-        float pdf = saturate(abs(dot(lightNormal, lightVector))) * lightArea;
+        lightVector *= rsqrt(lightLengthSqr);
+        float pdf = saturate(abs(dot(lightNormal, lightVector)));
         pdf = (lightLengthSqr != 0.0F) ? pdf / lightLengthSqr : 0.0f;
-        radiance = emissivity * pdf;
+        radiance = emissivity * (lightArea * pdf);
     }
 #       if !defined(DISABLE_DELTA_LIGHTS) || !defined(DISABLE_ENVIRONMENT_LIGHTS)
     else
@@ -651,12 +743,9 @@ float sampleLightPoint(Light selectedLight, float3 position)
         LightPoint light = MakeLightPoint(selectedLight);
 
         // Evaluate radiance at specified point
-        float3 lightVector = light.position - position;
-        float dist = length(lightVector);
-        lightVector /= dist;
-        float distMod = dist / light.range;
-        float rad = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        radiance = light.intensity * rad.xxx;
+        float distSqr = distanceSqr(light.position, position);
+        float rad = saturate(1.0f - (squared(distSqr) / squared(squared(light.range)))) / (0.0001f + distSqr);
+        radiance = light.intensity * rad;
     }
     else
 #       ifndef DISABLE_ENVIRONMENT_LIGHTS
@@ -682,12 +771,12 @@ float sampleLightPoint(Light selectedLight, float3 position)
         // Environment light is constant at all points so just sample the environment map at
         //   lower mip levels to get combined contribution
         // Due to use of cube map all 6 sides must be individually sampled
-        radiance = g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, 1.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, -1.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 1.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, -1.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(1.0f, 0.0f, 0.0f), light.lods).xyz;
-        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(-1.0f, 0.0f, 0.0f), light.lods).xyz;
+        radiance = g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, 1.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, -1.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 1.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, -1.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(1.0f, 0.0f, 0.0f), light.mips).xyz;
+        radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(-1.0f, 0.0f, 0.0f), light.mips).xyz;
         radiance *= FOUR_PI / 6.0f;
     }
 #   endif // DISABLE_ENVIRONMENT_LIGHTS
@@ -720,7 +809,7 @@ float sampleLightPointNormal(Light selectedLight, float3 position, float3 normal
         LightArea light = MakeLightArea(selectedLight);
 
         // Get light position at approximate midpoint
-        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, (1.0f / 3.0f).xx);
+        float3 lightPosition = interpolate(light.v0, light.v1, light.v2, 0.3333333333333f.xx);
 
         float3 emissivity = light.emissivity.xyz;
         uint emissivityTex = asuint(light.emissivity.w);
@@ -744,13 +833,13 @@ float sampleLightPointNormal(Light selectedLight, float3 position, float3 normal
         float3 lightCross = cross(edge1, edge2);
         // Calculate surface area of triangle
         float lightNormalLength = length(lightCross);
-        float3 lightNormal = lightCross / lightNormalLength.xxx;
+        float3 lightNormal = lightCross / lightNormalLength;
         float lightArea = 0.5f * lightNormalLength;
 
         // Evaluate radiance at specified point
         float3 lightVector = position - lightPosition;
         float lightLengthSqr = lengthSqr(lightVector);
-        lightVector *= rsqrt(lightLengthSqr).xxx;
+        lightVector *= rsqrt(lightLengthSqr);
         float pdf = saturate(abs(dot(lightNormal, lightVector))) * lightArea;
         pdf = (lightLengthSqr != 0.0F) ? pdf / lightLengthSqr : 0.0f;
         radiance = emissivity * pdf;
@@ -777,11 +866,10 @@ float sampleLightPointNormal(Light selectedLight, float3 position, float3 normal
 
         // Evaluate radiance at specified point
         float3 lightVector = light.position - position;
-        float dist = length(lightVector);
-        lightVector /= dist;
-        float distMod = dist / light.range;
-        float rad = saturate(1.0f - (distMod * distMod * distMod * distMod)) / (dist * dist);
-        radiance = light.intensity * rad.xxx * saturate(dot(lightVector, normal));
+        float distSqr = lengthSqr(lightVector);
+        float rad = saturate(1.0f - (squared(distSqr) / squared(squared(light.range)))) / (0.0001f + distSqr);
+        lightVector *= rsqrt(distSqr);
+        radiance = light.intensity * rad * saturate(dot(lightVector, normal));
     }
     else
 #       ifndef DISABLE_ENVIRONMENT_LIGHTS
@@ -811,17 +899,17 @@ float sampleLightPointNormal(Light selectedLight, float3 position, float3 normal
         float count = 0.0f;
         if (normal.z != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, normal.z), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, 0.0f, normal.z), light.mips).xyz;
             ++count;
         }
         if (normal.y != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, normal.y, 0.0f), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(0.0f, normal.y, 0.0f), light.mips).xyz;
             ++count;
         }
         if (normal.x != 0)
         {
-            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(normal.x, 0.0f, 0.0f), light.lods).xyz;
+            radiance += g_EnvironmentBuffer.SampleLevel(g_TextureSampler, float3(normal.x, 0.0f, 0.0f), light.mips).xyz;
             ++count;
         }
         radiance /= count;

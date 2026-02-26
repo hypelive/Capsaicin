@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@ THE SOFTWARE.
 #define WORLD_SPACE_RESTIR_HLSL
 
 #include "lights/reservoir.hlsl"
+#include "math/pack.hlsl"
 
 // A define for the number of samples to draw during RIS:
 #define kReservoir_SampleCount        8
@@ -152,20 +153,14 @@ uint Reservoir_FindPreviousEntry(in float3 position)
 // Packs the indirect sample.
 float4 Reservoir_PackIndirectSample(in float3 origin, in float3 hit_position)
 {
-    uint4 packed_origin       = f32tof16(float4(origin, 1.0f));
-    uint4 packed_hit_position = f32tof16(float4(hit_position, 1.0f));
-
-    return asfloat((packed_origin << 16) | packed_hit_position);
+    return asfloat(uint4(packHalf3(origin), packHalf3(hit_position)));
 }
 
 // Unpacks the indirect sample.
 void Reservoir_UnpackIndirectSample(in float4 packed_indirect_sample, out float3 origin, out float3 hit_position)
 {
-    uint4 packed_origin       = (asuint(packed_indirect_sample) >> 16);
-    uint4 packed_hit_position = (asuint(packed_indirect_sample) & 0xFFFFu);
-
-    origin       = f16tof32(packed_origin).xyz;
-    hit_position = f16tof32(packed_hit_position).xyz;
+    origin       = unpackHalf3(asuint(packed_indirect_sample.xy));
+    hit_position = unpackHalf3(asuint(packed_indirect_sample.zw));
 }
 
 #endif // WORLD_SPACE_RESTIR_HLSL

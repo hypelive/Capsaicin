@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@ uint g_LutSize;
 SamplerState g_LinearSampler;
 
 #include "light_sampler_grid_stream.hlsl"
-#include "math/random.hlsl"
+#include "components/random_number_generator/random_number_generator.hlsl"
 
 #define THREADX 128 // Must match light_sampler_grid_stream_bounds.comp
 #define THREADY 1
@@ -101,7 +101,7 @@ void Build(in uint3 did : SV_DispatchThreadID, in uint gid : SV_GroupIndex)
 
     // Calculate the bounding box for the current cell
     float3 extent;
-    const float3 minBB = LightSamplerGrid::getCellBB(cellID, extent);
+    const float3 minBB = LightSamplerGrid::getCellJitteredBB(cellID, extent);
 
 #ifdef LIGHTSAMPLERSTREAM_USE_OCTAHEDRON_SAMPLING
     uint cellIndex = LightSamplerGrid::getCellOctaIndex(cellID, cellFace) + reservoirIndex;

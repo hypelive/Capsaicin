@@ -15,6 +15,7 @@ file(GLOB_RECURSE CAPSAICIN_SHADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.task
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.comp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.hlsl
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/*.hlsli
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.rt
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*_shared.h
 )
@@ -78,11 +79,16 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/MP /W4 /WX /experimental:external /external:anglebrackets /external:W0 /analyze:external->)
+    target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/wd28020>) # The expression 'expr' is not true at this call - currently bugged
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    if("${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
+    if("${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "MSVC")
         target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX>)
+        target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-cast-function-type-mismatch>) # cast from 'FARPROC' X to Y converts to incompatible function type
     else()
         target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
+        target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-microsoft-enum-value>) # enumerator value is not representable in the underlying type 'int'
+        target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-language-extension-token>) # extension used
+        target_compile_options(capsaicin PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-cast-function-type-mismatch>) # cast from 'FARPROC' X to Y converts to incompatible function type
     endif()
 endif()
 
@@ -92,7 +98,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         target_compile_options(capsaicin PRIVATE /arch:AVX2)
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-        if("${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
+        if("${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "MSVC")
             target_compile_options(capsaicin PRIVATE /arch:AVX2)
         else()
             target_compile_options(capsaicin PRIVATE -march=x86-64-v3)
@@ -104,7 +110,9 @@ target_compile_definitions(capsaicin PRIVATE
     GLM_FORCE_XYZW_ONLY
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" OR "${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
+include(CheckCXXSymbolExists)
+check_cxx_symbol_exists(_MSVC_STL_VERSION version MSVCSTL)
+if(MSVCSTL)
     target_compile_definitions(capsaicin PRIVATE
         _CRT_SECURE_NO_WARNINGS
         _HAS_EXCEPTIONS=0
@@ -113,8 +121,6 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC" OR "${CMAKE_CXX_SIMULATE_ID}" STRE
         NOMINMAX
     )
 endif()
-
-target_link_options(capsaicin PRIVATE "/SUBSYSTEM:WINDOWS")
 
 function(assign_source_group arg1)
     foreach(_source IN ITEMS ${ARGN})
@@ -156,7 +162,7 @@ else()
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/gfx/third_party/imgui")
-    target_include_directories(capsaicin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/gfx/third_party/imgui"  
+    target_include_directories(capsaicin PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/gfx/third_party/imgui"
             "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/gfx/third_party/imgui/misc/cpp")
 else()
     find_package(imgui REQUIRED)
@@ -164,7 +170,7 @@ else()
 endif()
 
 target_link_libraries(capsaicin PUBLIC gfx
-    PRIVATE yaml-cpp::yaml-cpp meshoptimizer::meshoptimizer)
+    PRIVATE ffx_loader yaml-cpp::yaml-cpp meshoptimizer::meshoptimizer)
 
 set_target_properties(capsaicin PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CAPSAICIN_RUNTIME_OUTPUT_DIRECTORY}

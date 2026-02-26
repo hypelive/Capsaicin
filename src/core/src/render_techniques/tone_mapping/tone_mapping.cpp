@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "../../components/blue_noise_sampler/blue_noise_sampler.h"
 #include "capsaicin_internal.h"
+
+using namespace std;
 
 namespace Capsaicin
 {
@@ -62,16 +64,18 @@ ComponentList ToneMapping::getComponents() const noexcept
 SharedBufferList ToneMapping::getSharedBuffers() const noexcept
 {
     SharedBufferList buffers;
-    buffers.push_back({"Exposure", SharedBuffer::Access::Read});
+    buffers.push_back({.name = "Exposure", .access = SharedBuffer::Access::Read});
     return buffers;
 }
 
 SharedTextureList ToneMapping::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
-    textures.push_back({"Debug", SharedTexture::Access::ReadWrite});
-    textures.push_back({"ColorScaled", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Optional});
+    textures.push_back({.name = "Color", .access = SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "Debug", .access = SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "ColorScaled",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::OptionalDiscard});
     return textures;
 }
 
@@ -84,6 +88,7 @@ DebugViewList ToneMapping::getDebugViews() const noexcept
 
 bool ToneMapping::init(CapsaicinInternal const &capsaicin) noexcept
 {
+    options = convertOptions(capsaicin.getOptions());
     if (options.tonemap_enable)
     {
         // Create kernels
@@ -104,8 +109,8 @@ void ToneMapping::render(CapsaicinInternal &capsaicin) noexcept
         {
             // Destroy resources when not being used
             terminate();
-            options.tonemap_enable = false;
         }
+        options = newOptions;
         return;
     }
 
@@ -121,7 +126,7 @@ void ToneMapping::render(CapsaicinInternal &capsaicin) noexcept
         }
     }
     else if (auto const newColourSpace = gfxGetBackBufferColorSpace(gfx_);
-             recompile || newColourSpace != colourSpace)
+        recompile || newColourSpace != colourSpace)
     {
         if (!initToneMapKernel())
         {
@@ -177,14 +182,19 @@ void ToneMapping::render(CapsaicinInternal &capsaicin) noexcept
     // Call the tone mapping kernel on each pixel of colour buffer
     if (usingDither)
     {
-        auto const blue_noise_sampler = capsaicin.getComponent<BlueNoiseSampler>();
-        blue_noise_sampler->addProgramParameters(capsaicin, toneMappingProgram);
+        auto const blueNoiseSampler = capsaicin.getComponent<BlueNoiseSampler>();
+        blueNoiseSampler->addProgramParameters(capsaicin, toneMappingProgram);
+        gfxProgramSetParameter(gfx_, toneMappingProgram, "g_FrameIndex", capsaicin.getFrameIndex());
     }
-    gfxProgramSetParameter(gfx_, toneMappingProgram, "g_FrameIndex", capsaicin.getFrameIndex());
     auto const bufferDimensions =
         !usesScaling ? capsaicin.getRenderDimensions() : capsaicin.getWindowDimensions();
     gfxProgramSetParameter(gfx_, toneMappingProgram, "g_BufferDimensions", bufferDimensions);
     gfxProgramSetParameter(gfx_, toneMappingProgram, "g_InputBuffer", input);
+    if (usingHDR)
+    {
+        gfxProgramSetParameter(gfx_, toneMappingProgram, "g_MaxLuminance", maxLuminance);
+        gfxProgramSetParameter(gfx_, toneMappingProgram, "g_ExposureScale", exposureScale);
+    }
     gfxProgramSetParameter(gfx_, toneMappingProgram, "g_OutputBuffer", output);
     gfxProgramSetParameter(gfx_, toneMappingProgram, "g_Exposure", capsaicin.getSharedBuffer("Exposure"));
     {
@@ -212,15 +222,16 @@ void ToneMapping::renderGUI(CapsaicinInternal &capsaicin) const noexcept
     ImGui::Checkbox("Enable Tone Mapping", &enabled);
     if (enabled)
     {
-        constexpr auto operatorList =
-            "None\0Reinhard Simple\0Reinhard Luminance\0ACES Approximate\0ACES Fitted\0ACES\0PBR Neutral\0Uncharted 2\0Agx Fitted\0Agx\0";
-        auto const currentOperator  = capsaicin.getOption<uint32_t>("tonemap_operator");
-        auto       selectedOperator = static_cast<int32_t>(currentOperator);
-        if (ImGui::Combo("Tone Mapper", &selectedOperator, operatorList, 5))
+        constexpr array<char const *, 10> operatorList     = {"None", "Reinhard Simple", "Reinhard Luminance",
+                "ACES Approximate", "ACES Fitted", "ACES", "PBR Neutral", "Uncharted 2", "Agx Fitted", "Agx"};
+        auto const                        currentOperator  = capsaicin.getOption<uint8_t>("tonemap_operator");
+        auto                              selectedOperator = static_cast<int32_t>(currentOperator);
+        if (ImGui::Combo("Tone Mapper", &selectedOperator, operatorList.data(),
+                static_cast<int32_t>(operatorList.size())))
         {
-            if (currentOperator != static_cast<uint32_t>(selectedOperator))
+            if (currentOperator != static_cast<uint8_t>(selectedOperator))
             {
-                capsaicin.setOption("tonemap_operator", static_cast<uint32_t>(selectedOperator));
+                capsaicin.setOption("tonemap_operator", static_cast<uint8_t>(selectedOperator));
             }
         }
     }
@@ -233,13 +244,44 @@ bool ToneMapping::initToneMapKernel() noexcept
     // Get current display color space and depth
     colourSpace = gfxGetBackBufferColorSpace(gfx_);
 
-    std::vector<char const *> defines;
-    usingDither              = false;
-    auto const displayFormat = gfxGetBackBufferFormat(gfx_);
-    if (displayFormat == DXGI_FORMAT_R10G10B10A2_UNORM)
+    vector<char const *> defines;
+    if (colourSpace == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709)
     {
-        defines.push_back("DITHER_10");
-        usingDither = true;
+        // scRGB
+        defines.push_back("OUTPUT_SCRGB");
+    }
+    else if (colourSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+    {
+        // BT2020
+        defines.push_back("OUTPUT_HDR10");
+    }
+    else // DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709
+    {
+        // Assume anything else is just sRGB as we don't know what it is
+        defines.push_back("OUTPUT_SRGB");
+    }
+
+    usingDither = false;
+    usingHDR    = false;
+    if (auto const displayFormat = gfxGetBackBufferFormat(gfx_);
+        displayFormat == DXGI_FORMAT_R16G16B16A16_FLOAT)
+    {
+        // HDR, can only be scRGB
+        usingHDR = true;
+    }
+    else if (displayFormat == DXGI_FORMAT_R10G10B10A2_UNORM)
+    {
+        // Can either be 10bit SDR or HDR10
+        if (colourSpace != DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+        {
+            // 10 bit SDR
+            defines.push_back("DITHER_10");
+            usingDither = true;
+        }
+        else
+        {
+            usingHDR = true;
+        }
     }
     else
     {
@@ -248,41 +290,33 @@ bool ToneMapping::initToneMapKernel() noexcept
         usingDither = true;
     }
 
-    if (options.tonemap_operator == 1)
+    if (usingHDR)
     {
-        defines.push_back("TONEMAP_REINHARD");
+        defines.push_back("OUTPUT_HDR");
+
+        // Get display luminance as that's tied to output kernel
+        // As many current OLED panels cant provide max brightness at 1000% APL we split somewhere in the
+        // middle
+        auto const displayValues = gfxGetDisplayDescription(gfx_);
+        maxLuminance             = displayValues.max_luminance
+                     + ((displayValues.max_luminance_full_frame - displayValues.max_luminance) * 0.5F);
+        // Standard SDR white level is 80 cd/m2, HDR displays require brighter white level (see ITU-R
+        // BT.2408-7) so we scale by the higher reference white
+        exposureScale = displayValues.reference_sdr_white_level / 80.0F;
     }
-    else if (options.tonemap_operator == 2)
+
+    switch (static_cast<RenderOptions::TonemapOperator>(options.tonemap_operator))
     {
-        defines.push_back("TONEMAP_REINHARDL");
-    }
-    else if (options.tonemap_operator == 3)
-    {
-        defines.push_back("TONEMAP_ACESFAST");
-    }
-    else if (options.tonemap_operator == 4)
-    {
-        defines.push_back("TONEMAP_ACESFITTED");
-    }
-    else if (options.tonemap_operator == 5)
-    {
-        defines.push_back("TONEMAP_ACES");
-    }
-    else if (options.tonemap_operator == 6)
-    {
-        defines.push_back("TONEMAP_PBRNEUTRAL");
-    }
-    else if (options.tonemap_operator == 7)
-    {
-        defines.push_back("TONEMAP_UNCHARTED2");
-    }
-    else if (options.tonemap_operator == 8)
-    {
-        defines.push_back("TONEMAP_AGXFITTED");
-    }
-    else if (options.tonemap_operator == 9)
-    {
-        defines.push_back("TONEMAP_AGX");
+    case RenderOptions::TonemapOperator::ReinhardSimple:    defines.push_back("TONEMAP_REINHARD"); break;
+    case RenderOptions::TonemapOperator::ReinhardLuminance: defines.push_back("TONEMAP_REINHARDL"); break;
+    case RenderOptions::TonemapOperator::ACESFast:          defines.push_back("TONEMAP_ACESFAST"); break;
+    case RenderOptions::TonemapOperator::ACESFitted:        defines.push_back("TONEMAP_ACESFITTED"); break;
+    case RenderOptions::TonemapOperator::ACES:              defines.push_back("TONEMAP_ACES"); break;
+    case RenderOptions::TonemapOperator::PBRNeutral:        defines.push_back("TONEMAP_PBRNEUTRAL"); break;
+    case RenderOptions::TonemapOperator::Uncharted2:        defines.push_back("TONEMAP_UNCHARTED2"); break;
+    case RenderOptions::TonemapOperator::AgxFitted:         defines.push_back("TONEMAP_AGXFITTED"); break;
+    case RenderOptions::TonemapOperator::Agx:               defines.push_back("TONEMAP_AGX"); break;
+    default:                                                defines.push_back("TONEMAP_NONE"); break;
     }
     toneMapKernel = gfxCreateComputeKernel(
         gfx_, toneMappingProgram, "Tonemap", defines.data(), static_cast<uint32_t>(defines.size()));

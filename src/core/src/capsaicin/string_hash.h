@@ -1,5 +1,5 @@
 ﻿/**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -106,27 +106,27 @@ public:
 
     constexpr bool operator<=(std::string_view const &other) const noexcept
     {
-        return hash == StringHash(other).hash;
+        return hash <= StringHash(other).hash;
     }
 
     constexpr bool operator>=(std::string_view const &other) const noexcept
     {
-        return hash == StringHash(other).hash;
+        return hash >= StringHash(other).hash;
     }
 
     constexpr bool operator!=(std::string_view const &other) const noexcept
     {
-        return hash == StringHash(other).hash;
+        return hash != StringHash(other).hash;
     }
 
     constexpr bool operator<(std::string_view const &other) const noexcept
     {
-        return hash == StringHash(other).hash;
+        return hash < StringHash(other).hash;
     }
 
     constexpr bool operator>(std::string_view const &other) const noexcept
     {
-        return hash == StringHash(other).hash;
+        return hash > StringHash(other).hash;
     }
 };
 

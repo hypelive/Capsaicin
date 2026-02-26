@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,6 +24,7 @@ THE SOFTWARE.
 #define SCREEN_PROBES_HLSL
 
 #include "math/spherical_harmonics.hlsl"
+#include "math/pack.hlsl"
 
 // The angular threshold for allowing probe-based radiance reuse:
 #define kGI1_AngleThreshold cos(2e-2f * PI)
@@ -167,13 +168,13 @@ uint ScreenProbes_FindClosestProbe(in uint2 pos, in int2 offset)
 // Packs the coefficients of the SH color.
 uint2 ScreenProbes_PackSHColor(in float4 sh_color)
 {
-    return (f32tof16(sh_color.xy) << 16) | f32tof16(float2(sh_color.zw));
+    return packHalf4(sh_color);
 }
 
 // Unpacks the SH color from its packed format inside the probes.
 float4 ScreenProbes_UnpackSHColor(in uint2 packed_sh_color)
 {
-    return float4(f16tof32(packed_sh_color >> 16), f16tof32(packed_sh_color & 0xFFFFu));
+    return unpackHalf4(packed_sh_color);
 }
 
 // Evaluates the irradiance from the probe's SH representation.
@@ -217,13 +218,13 @@ float3 ScreenProbes_CalculateSHIrradiance_BentCone(in float3 normal, in float ao
 // Packs the radiance for storing inside the probe cell.
 uint2 ScreenProbes_PackRadiance(in float4 radiance)
 {
-    return (f32tof16(radiance.xy) << 16) | f32tof16(float2(radiance.zw));
+    return packHalf4(radiance);
 }
 
 // Unpacks the radiance from its packed format inside the probe cell.
 float4 ScreenProbes_UnpackRadiance(in uint2 packed_radiance)
 {
-    return float4(f16tof32(packed_radiance >> 16), f16tof32(packed_radiance & 0xFFFFu));
+    return unpackHalf4(packed_radiance);
 }
 
 // Quantizes the radiance value so it can be blended atomically.
@@ -267,17 +268,13 @@ uint2 ScreenProbes_GetCellAndProbeIndex(in uint query_index)
 // Packs the screen probe sample.
 uint2 ScreenProbes_PackSample(in float3 direction)
 {
-    uint3 packed_sample = f32tof16(direction);
-
-    return uint2((packed_sample.x << 16) | packed_sample.y, packed_sample.z << 16);
+    return packHalf3(direction);
 }
 
 // Unpacks the screen probe sample.
 float3 ScreenProbes_UnpackSample(in uint2 packed_sample)
 {
-    uint3 unpacked_sample = uint3(packed_sample.x >> 16, packed_sample.x & 0xFFFFu, packed_sample.y >> 16);
-
-    return f16tof32(unpacked_sample);
+    return unpackHalf3(packed_sample);
 }
 
 // Finds the index corresponding to the sampled cell.

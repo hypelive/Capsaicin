@@ -9,7 +9,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         target_compile_options(scene_viewer PRIVATE /arch:AVX2)
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-        if("${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
+        if("${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "MSVC")
             target_compile_options(scene_viewer PRIVATE /arch:AVX2)
         else()
             target_compile_options(scene_viewer PRIVATE -march=x86-64-v3)
@@ -19,26 +19,28 @@ endif()
 
 target_compile_features(scene_viewer PUBLIC cxx_std_20)
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
+    target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic>)
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/MP /W4 /WX /experimental:external /external:anglebrackets /external:W0 /analyze:external->)
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    if("${CMAKE_CXX_SIMULATE_ID}" STREQUAL "MSVC")
+    if("${CMAKE_CXX_COMPILER_FRONTEND_VARIANT}" STREQUAL "MSVC")
         target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /WX>)
     else()
-        target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic -Werror>)
+        target_compile_options(scene_viewer PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic>)
     endif()
 endif()
+
 target_compile_definitions(scene_viewer PRIVATE
     GLM_FORCE_XYZW_ONLY
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
 target_compile_definitions(scene_viewer PRIVATE "$<$<CONFIG:RelWithDebInfo>:SHADER_DEBUG>")
+if(CAPSAICIN_ENABLE_EXPERIMENTAL_SHADERS)
+    target_compile_definitions(scene_viewer PRIVATE "SHADER_EXPERIMENTAL")
+endif()
 
 target_link_libraries(scene_viewer PRIVATE capsaicin CLI11::CLI11)
-
-target_link_options(scene_viewer PRIVATE "/SUBSYSTEM:WINDOWS")
 
 set_target_properties(scene_viewer PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

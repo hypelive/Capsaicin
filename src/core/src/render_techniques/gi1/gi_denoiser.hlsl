@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,48 +23,31 @@ THE SOFTWARE.
 #ifndef GI_DENOISER_HLSL
 #define GI_DENOISER_HLSL
 
-#define kGIDenoiser_BlurRadius    4
-#define kGIDenoiser_BlurGroupSize 8
-#define kGIDenoiser_BlurTileDim  (2 * kGIDenoiser_BlurRadius + kGIDenoiser_BlurGroupSize)
+#define kGIDenoiser_MaxBlurMask   8.0f
 
 //!
-//! GI-1.0 denoiser shader bindings.
+//! GI-1 denoiser shader bindings.
 //!
 
 RWTexture2D<float>  g_GIDenoiser_BlurMask;
-RWTexture2D<float>  g_GIDenoiser_BlurredBlurMask;
 RWTexture2D<float4> g_GIDenoiser_ColorBuffer;
 RWTexture2D<float>  g_GIDenoiser_ColorDeltaBuffer;
 Texture2D           g_GIDenoiser_PreviousColorBuffer;
 Texture2D           g_GIDenoiser_PreviousColorDeltaBuffer;
 
-RWStructuredBuffer<uint> g_GIDenoiser_BlurSampleCountBuffer;
-
-groupshared float lds_GIDenoiser_BlurMask[kGIDenoiser_BlurTileDim * kGIDenoiser_BlurTileDim];
-groupshared uint  lds_GIDenoiser_BlurSampleCount;
-
 //!
-//! GI-1.0 denoiser helper functions.
+//! GI-1 denoiser helper functions.
 //!
-
-// Taps the local blur masking tile.
-float GIDenoiser_TapBlurMask(in float2 pos)
-{
-    return lds_GIDenoiser_BlurMask[int(pos.x) + kGIDenoiser_BlurTileDim * int(pos.y)];
-}
 
 // Retrieves the radius for the blur kernel.
 int GIDenoiser_GetBlurRadius(in uint2 pos)
 {
     int   blur_radius = 0;
-    float blur_mask   = g_GIDenoiser_BlurredBlurMask[pos] * 127.0f;
+    float blur_mask = g_GIDenoiser_BlurMask[pos] * kGIDenoiser_MaxBlurMask;
 
     if (blur_mask > 0.0f)
     {
-        float blur_sample_count_per_pixel = float(g_GIDenoiser_BlurSampleCountBuffer[0]) / (g_BufferDimensions.x * g_BufferDimensions.y);
-        float blur_mask_offset            = max(0.5f * sqrt(max(blur_sample_count_per_pixel - 25.0f, 0.0f)) - 1.0f, 0.0f);
-
-        blur_radius = int(max(blur_mask - blur_mask_offset, 1.0f) + 0.5f);
+        blur_radius = int(max(blur_mask, 1.0f) + 0.5f);
     }
 
     return blur_radius;

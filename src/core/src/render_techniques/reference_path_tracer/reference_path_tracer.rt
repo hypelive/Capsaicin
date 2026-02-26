@@ -23,6 +23,7 @@ THE SOFTWARE.
 #define USE_INLINE_RT 0
 
 #include "reference_path_tracer.comp"
+#include "ray_tracing/path_tracing_rt.hlsl"
 
 TriangleHitGroup ReferencePTHitGroup =
 {
@@ -39,7 +40,7 @@ TriangleHitGroup ReferencePTShadowHitGroup =
 RaytracingShaderConfig MyShaderConfig =
 {
     sizeof(PathData), // max payload size
-    8 // max attribute size
+    sizeof(BuiltInTriangleIntersectionAttributes) // max attribute size
 };
 
 RaytracingPipelineConfig MyPipelineConfig =
@@ -57,23 +58,13 @@ void ReferencePTRaygen()
 [shader("anyhit")]
 void ReferencePTAnyHit(inout PathData path, in BuiltInTriangleIntersectionAttributes attr)
 {
-#ifndef DISABLE_ALPHA_TESTING
-    if (!AlphaTest(GetHitInfoRt(attr)))
-    {
-        IgnoreHit();
-    }
-#endif
+    pathAnyHit(attr);
 }
 
 [shader("anyhit")]
 void ReferencePTShadowAnyHit(inout ShadowRayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-#ifndef DISABLE_ALPHA_TESTING
-    if (!AlphaTest(GetHitInfoRt(attr)))
-    {
-        IgnoreHit();
-    }
-#endif
+    pathShadowAnyHit(attr);
 }
 
 [shader("closesthit")]
@@ -82,24 +73,18 @@ void ReferencePTClosestHit(inout PathData path, in BuiltInTriangleIntersectionAt
     // Setup configurable constants
     const uint minBounces = g_BounceRRCount; // Minimum bounces before early terminations are allowed
     const uint maxBounces = g_BounceCount;
-    RayDesc ray = GetRayDescRt();
-    HitInfo hitData = GetHitInfoRt(attr);
-    IntersectData iData = MakeIntersectData(hitData);
-    path.terminated = !pathHit(ray, hitData, iData, path.randomStratified, path.lightSampler,
-        path.bounce, minBounces, maxBounces, path.normal, path.samplePDF, path.throughput, path.radiance);
-    path.origin = ray.Origin;
-    path.direction = ray.Direction;
+    pathClosestHit(path, attr, minBounces, maxBounces);
 }
 
 [shader("miss")]
-void ReferencePTMiss(inout PathData pathData)
+void ReferencePTMiss(inout PathData path)
 {
-    shadePathMiss(GetRayDescRt(), pathData.bounce, pathData.lightSampler, pathData.normal, pathData.samplePDF, pathData.throughput, pathData.radiance);
-    pathData.terminated = true;
+    pathMiss(path);
 }
 
 [shader("miss")]
 void ReferencePTShadowMiss(inout ShadowRayPayload payload)
 {
+    // pathShadowMiss(payload); // Inline this to avoid invalid debug layer warnings
     payload.visible = true;
 }

@@ -1,5 +1,5 @@
 ﻿/**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -54,7 +54,7 @@ void CalculateBounds()
     const float3 sceneExtent = sceneMax - sceneMin;
     const float largestAxis = max(sceneExtent.x, max(sceneExtent.y, sceneExtent.z));
     const float cellScale = largestAxis / g_LightSampler_Constants.maxCellsPerAxis;
-    const float3 cellNum = ceil(sceneExtent / cellScale);
+    const float3 cellNum = max(ceil(sceneExtent / cellScale), 1);
 
     // Clamp max number of lights to those actually available
     const uint lightsPerCell = min(g_LightSampler_Constants.maxNumLightsPerCell, getNumberLights());

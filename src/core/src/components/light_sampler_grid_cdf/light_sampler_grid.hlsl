@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -23,6 +23,10 @@ THE SOFTWARE.
 #ifndef LIGHT_SAMPLER_GRID_HLSL
 #define LIGHT_SAMPLER_GRID_HLSL
 
+#ifndef LIGHT_SAMPLE_GRID_JITTER_SCALE
+#   define LIGHT_SAMPLE_GRID_JITTER_SCALE 0.5f
+#endif
+
 namespace LightSamplerGrid
 {
     /**
@@ -32,7 +36,7 @@ namespace LightSamplerGrid
      */
     uint getCellIndex(uint3 cell)
     {
-        const uint3 numCells = g_LightSampler_Configuration[0].numCells.xyz;
+        const uint2 numCells = g_LightSampler_Configuration[0].numCells.xy;
         const uint maxLightsPerCell = g_LightSampler_Configuration[0].numCells.w;
         uint index = cell.x + numCells.x * (cell.y + numCells.y * cell.z);
         index *= maxLightsPerCell;
@@ -47,7 +51,7 @@ namespace LightSamplerGrid
      */
     uint getCellOctaIndex(uint3 cell, uint face)
     {
-        const uint3 numCells = g_LightSampler_Configuration[0].numCells.xyz;
+        const uint2 numCells = g_LightSampler_Configuration[0].numCells.xy;
         const uint maxLightsPerCell = g_LightSampler_Configuration[0].numCells.w;
         uint index = cell.x + numCells.x * (cell.y + numCells.y * cell.z);
         index *= 8;
@@ -96,22 +100,23 @@ namespace LightSamplerGrid
         const float3 numCells = (float3)g_LightSampler_Configuration[0].numCells.xyz;
         float3 relativePos = position - g_LightSampler_Configuration[0].sceneMin;
         relativePos /= g_LightSampler_Configuration[0].sceneExtent;
-        const uint3 cell = clamp(floor(relativePos * numCells), 0.0f, numCells - 1.0f.xxx);
+        const uint3 cell = clamp(floor(relativePos * numCells), 0.0f, numCells - 1.0f);
         return cell;
     }
 
     /**
      * Calculate which cell a position falls within for a given jittered position.
-     * @note The current position will be jittered by +-quarter the current cell size.
-     * @param position The world space position.
+     * @note The current position will be jittered by +-LIGHT_SAMPLE_GRID_JITTER_SCALE the current cell size.
      * @tparam RNG The type of random number sampler to be used.
+     * @param position The world space position.
+     * @param randomNG The random number generator.
      * @return The index of the grid cell.
      */
     template<typename RNG>
     uint3 getCellFromJitteredPosition(float3 position, inout RNG randomNG)
     {
-        // Jitter current position by +-quarter cell size
-        position += (randomNG.rand3() - 0.25f) * g_LightSampler_Configuration[0].cellSize;
+        // Jitter current position by +-jitter cell size
+        position += ((2.0f * randomNG.rand3() - 1.0f) * LIGHT_SAMPLE_GRID_JITTER_SCALE) * g_LightSampler_Configuration[0].cellSize;
 
         return getCellFromPosition(position);
     }
@@ -155,14 +160,29 @@ namespace LightSamplerGrid
      */
     float3 getCellBB(uint3 cellID, out float3 extent)
     {
-        const float3 minBB = ((float3)cellID * g_LightSampler_Configuration[0].cellSize) + g_LightSampler_Configuration[0].sceneMin;
-        extent = g_LightSampler_Configuration[0].cellSize;
+        const float3 cellSize = g_LightSampler_Configuration[0].cellSize;
+        const float3 minBB = ((float3)cellID * cellSize) + g_LightSampler_Configuration[0].sceneMin;
+        extent = cellSize;
+        return minBB;
+    }
+
+    /**
+     * Get the expanded bounding box for a specific grid cell taking into account additional volume from position jittering.
+     * @param cellID The ID of the grid cell.
+     * @param extent (Out) The return bounding box size.
+     * @return The bounding box min values.
+     */
+    float3 getCellJitteredBB(uint3 cellID, out float3 extent)
+    {
+        const float3 cellSize = g_LightSampler_Configuration[0].cellSize;
+        const float3 minBB = (((float3)cellID - LIGHT_SAMPLE_GRID_JITTER_SCALE) * cellSize) + g_LightSampler_Configuration[0].sceneMin;
+        extent = g_LightSampler_Configuration[0].cellSize * ((2.0f * LIGHT_SAMPLE_GRID_JITTER_SCALE) + 1.0f);
         return minBB;
     }
 
     /**
      * Get the current index into the light sampling cell buffer for a given jittered position.
-     * @note The current position will be jittered by +-quarter the current cell size.
+     * @note The current position will be jittered by +-LIGHT_SAMPLE_GRID_JITTER_SCALE the current cell size.
      * @tparam RNG The type of random number sampler to be used.
      * @param position Current position on surface.
      * @param randomNG The random number generator.
@@ -171,15 +191,15 @@ namespace LightSamplerGrid
     template<typename RNG>
     uint getCellIndexFromJitteredPosition(float3 position, inout RNG randomNG)
     {
-        // Jitter current position by +-quarter cell size
-        position += (randomNG.rand3() - 0.25f) * g_LightSampler_Configuration[0].cellSize;
+        // Jitter current position by +-jitter cell size
+        position += ((2.0f * randomNG.rand3() - 1.0f) * LIGHT_SAMPLE_GRID_JITTER_SCALE) * g_LightSampler_Configuration[0].cellSize;
 
         return getCellIndexFromPosition(position);
     }
 
     /**
      * Get the current index into the light sampling octahedron cell buffer for a given jittered position.
-     * @note The current position will be jittered by +-quarter the current cell size.
+     * @note The current position will be jittered by +-LIGHT_SAMPLE_GRID_JITTER_SCALE the current cell size.
      * @tparam RNG The type of random number sampler to be used.
      * @param position Current position on surface.
      * @param normal   Shading normal vector at current position.
@@ -189,8 +209,8 @@ namespace LightSamplerGrid
     template<typename RNG>
     uint getCellOctaIndexFromJitteredPosition(float3 position, float3 normal, inout RNG randomNG)
     {
-        // Jitter current position by +-quarter cell size
-        position += (randomNG.rand3() - 0.25f) * g_LightSampler_Configuration[0].cellSize;
+        // Jitter current position by +-jitter cell size
+        position += ((2.0f * randomNG.rand3() - 1.0f) * LIGHT_SAMPLE_GRID_JITTER_SCALE) * g_LightSampler_Configuration[0].cellSize;
 
         return getCellOctaIndexFromPosition(position, normal);
     }

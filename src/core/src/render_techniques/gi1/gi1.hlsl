@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,7 @@ THE SOFTWARE.
 #define kGI1_InvalidId 0xFFFFFFFFu
 
 //!
-//! GI-1.0 common functions.
+//! GI-1 common functions.
 //!
 
 #define origin()        (1.0f / 32.0f)

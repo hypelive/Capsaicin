@@ -27,26 +27,34 @@ THE SOFTWARE.
 
 TriangleHitGroup PopulateScreenProbesHitGroup =
 {
-    "PopulateScreenProbesAnyHit",     // AnyHit
+    "PopulateScreenProbesAnyHit", // AnyHit
     "PopulateScreenProbesClosestHit", // ClosestHit
 };
 
+#ifdef USE_MULTI_BOUNCE
+TriangleHitGroup PopulateMultibounceCellsHitGroup =
+{
+    "PopulateMultibounceCellsAnyHit", // AnyHit
+    "PopulateMultibounceCellsClosestHit", // ClosestHit
+};
+#endif
+
 TriangleHitGroup PopulateCellsHitGroup =
 {
-    "PopulateCellsAnyHit",     // AnyHit
+    "PopulateCellsAnyHit", // AnyHit
     "PopulateCellsClosestHit", // ClosestHit
 };
 
 TriangleHitGroup TraceReflectionsHitGroup =
 {
-    "TraceReflectionsAnyHit",     // AnyHit
+    "TraceReflectionsAnyHit", // AnyHit
     "TraceReflectionsClosestHit", // ClosestHit
 };
 
 RaytracingShaderConfig MyShaderConfig =
 {
     64, // max payload size
-    8   // max attribute size
+    sizeof(BuiltInTriangleIntersectionAttributes) // max attribute size
 };
 
 RaytracingPipelineConfig MyPipelineConfig =
@@ -63,25 +71,57 @@ void PopulateScreenProbesRaygen()
 [shader("anyhit")]
 void PopulateScreenProbesAnyHit(inout PopulateScreenProbesPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+#ifndef DISABLE_ALPHA_TESTING
     if (!AlphaTest(GetHitInfoRt(attr)))
     {
         IgnoreHit();
     }
+#endif
 }
 
 [shader("closesthit")]
 void PopulateScreenProbesClosestHit(inout PopulateScreenProbesPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
     payload.hit_dist = RayTCurrent();
-    PopulateScreenProbesHandleHit(DispatchRaysIndex().x, payload, GetRayDescRt(), GetHitInfoRt(attr));
+    PopulateScreenProbesHandleHit(DispatchRaysIndex().x, payload, GetRayInfoRt(), GetHitInfoRt(attr));
 }
 
 [shader("miss")]
 void PopulateScreenProbesMiss(inout PopulateScreenProbesPayload payload)
 {
-    payload.hit_dist = 1e9f;
-    PopulateScreenProbesHandleMiss(payload, GetRayDescRt());
+    payload.hit_dist = FLT_MAX;
+    PopulateScreenProbesHandleMiss(payload, GetRayInfoRt());
 }
+
+#ifdef USE_MULTI_BOUNCE
+[shader("raygeneration")]
+void PopulateMultibounceCellsRaygen()
+{
+    PopulateMultibounceCells(DispatchRaysIndex().x);
+}
+
+[shader("anyhit")]
+void PopulateMultibounceCellsAnyHit(inout PopulateMultibounceCellsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+#ifndef DISABLE_ALPHA_TESTING
+    if (!AlphaTest(GetHitInfoRt(attr)))
+    {
+        IgnoreHit();
+    }
+#endif
+}
+
+[shader("closesthit")]
+void PopulateMultibounceCellsClosestHit(inout PopulateMultibounceCellsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    PopulateMultibounceCellsHandleHit(DispatchRaysIndex().x, payload, GetRayInfoRt(), GetHitInfoRt(attr), RayTCurrent());
+}
+
+[shader("miss")]
+void PopulateMultibounceCellsMiss(inout PopulateMultibounceCellsPayload payload)
+{
+}
+#endif
 
 [shader("raygeneration")]
 void PopulateCellsRaygen()
@@ -92,22 +132,24 @@ void PopulateCellsRaygen()
 [shader("anyhit")]
 void PopulateCellsAnyHit(inout PopulateCellsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+#ifndef DISABLE_ALPHA_TESTING
     if (!AlphaTest(GetHitInfoRt(attr)))
     {
         IgnoreHit();
     }
+#endif
 }
 
 [shader("closesthit")]
 void PopulateCellsClosestHit(inout PopulateCellsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    PopulateCellsHandleHit(DispatchRaysIndex().x, payload, GetRayDescRt());
+    PopulateCellsHandleHit(DispatchRaysIndex().x, payload, GetRayInfoRt());
 }
 
 [shader("miss")]
 void PopulateCellsMiss(inout PopulateCellsPayload payload)
 {
-    PopulateCellsHandleMiss(DispatchRaysIndex().x, payload, GetRayDescRt());
+    PopulateCellsHandleMiss(DispatchRaysIndex().x, payload, GetRayInfoRt());
 }
 
 [shader("raygeneration")]
@@ -119,20 +161,22 @@ void TraceReflectionsRaygen()
 [shader("anyhit")]
 void TraceReflectionsAnyHit(inout TraceReflectionsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+#ifndef DISABLE_ALPHA_TESTING
     if (!AlphaTest(GetHitInfoRt(attr)))
     {
         IgnoreHit();
     }
+#endif
 }
 
 [shader("closesthit")]
 void TraceReflectionsClosestHit(inout TraceReflectionsPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    TraceReflectionsHandleHit(DispatchRaysIndex().x, payload, GetRayDescRt(), GetHitInfoRt(attr), RayTCurrent());
+    TraceReflectionsHandleHit(DispatchRaysIndex().x, payload, GetRayInfoRt(), GetHitInfoRt(attr), RayTCurrent());
 }
 
 [shader("miss")]
 void TraceReflectionsMiss(inout TraceReflectionsPayload payload)
 {
-    TraceReflectionsHandleMiss(DispatchRaysIndex().x, payload, GetRayDescRt());
+    TraceReflectionsHandleMiss(DispatchRaysIndex().x, payload, GetRayInfoRt());
 }

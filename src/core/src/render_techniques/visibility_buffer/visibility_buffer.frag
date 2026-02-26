@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -72,6 +72,12 @@ Pixel main(in VertexParams params, in float3 barycentrics : SV_Barycentrics, in 
             alpha *= g_TextureMaps[NonUniformResourceIndex(alphaMap)].Sample(g_LinearSampler, params.uv).w;
         }
         float alpha_threshold = 0.5f;
+        if (asuint(material.normal_alpha_side.w) == 2)
+        {
+            // Use hashed alpha for blending
+            BlueNoiseSampler blue_noise_sampler = MakeBlueNoiseSampler(params.position.xy, g_FrameIndex);
+            alpha_threshold = clamp(blue_noise_sampler.rand2().x, 1e-6f, 1.0f);
+        }
         if (alpha <= alpha_threshold)
         {
             discard;

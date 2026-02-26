@@ -5,4 +5,8 @@ imgui.ini
 .vs
 out/
 cache/
+.cache/
 shader_cache/
+shader_pdb/
+dump/
+compile_commands.json

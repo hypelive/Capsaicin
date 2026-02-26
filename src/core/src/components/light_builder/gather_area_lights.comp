@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "gpu_shared.h"
+#include "lights/lights_shared.h"
 #include "light_builder_shared.h"
 
 StructuredBuffer<DrawData> g_DrawDataBuffer;
@@ -67,7 +67,7 @@ float4 GetRadiance(uint materialIndex)
 }
 
 /*
-// We used to cull triangles if they have zero effective radiance. But this adds issues in gathering area lights in to a list as now the length of each meshlet is unknown should primitives be culled. It also makes the whole process slower due to texture reads. As we done currently support animated textures then this optimisations has limited use as it should just be handled by scene processing such as surfaces with zero emissions and not flagged as emissive.
+// We used to cull triangles if they have zero effective radiance. But this adds issues in gathering area lights in to a list as now the length of each meshlet is unknown should primitives be culled. It also makes the whole process slower due to texture reads. As we dont currently support animated textures then this optimisations has limited use as it should just be handled by scene processing such as surfaces with zero emissions being not flagged as emissive.
 bool CheckIsEmissive(in uint materialIndex, in float2 uv0, in float2 uv1, in float2 uv2, out float4 radiance)
 {
     radiance = GetRadiance(materialIndex);

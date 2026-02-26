@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,10 @@ THE SOFTWARE.
 #include "blue_noise_sampler_samples.h" // Separate file as does not play well with IDEs
 #include "capsaicin_internal.h"
 
+#include <random>
+
+using namespace std;
+
 namespace Capsaicin
 {
 BlueNoiseSampler::BlueNoiseSampler() noexcept
@@ -34,6 +38,22 @@ BlueNoiseSampler::BlueNoiseSampler() noexcept
 BlueNoiseSampler::~BlueNoiseSampler() noexcept
 {
     terminate();
+}
+
+RenderOptionList BlueNoiseSampler::getRenderOptions() noexcept
+{
+    RenderOptionList newOptions;
+    newOptions.emplace(RENDER_OPTION_MAKE(blue_noise_sampler_deterministic, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(blue_noise_sampler_seed, options));
+    return newOptions;
+}
+
+BlueNoiseSampler::RenderOptions BlueNoiseSampler::convertOptions(RenderOptionList const &options) noexcept
+{
+    RenderOptions newOptions;
+    RENDER_OPTION_GET(blue_noise_sampler_deterministic, newOptions, options)
+    RENDER_OPTION_GET(blue_noise_sampler_seed, newOptions, options)
+    return newOptions;
 }
 
 bool BlueNoiseSampler::init([[maybe_unused]] CapsaicinInternal const &capsaicin) noexcept
@@ -46,7 +66,27 @@ bool BlueNoiseSampler::init([[maybe_unused]] CapsaicinInternal const &capsaicin)
 
 void BlueNoiseSampler::run([[maybe_unused]] CapsaicinInternal &capsaicin) noexcept
 {
-    // Nothing to do
+    // Check for option changed
+    auto const optionsNew = convertOptions(capsaicin.getOptions());
+
+    if (optionsNew.blue_noise_sampler_deterministic != options.blue_noise_sampler_deterministic
+        || (options.blue_noise_sampler_deterministic
+            && (optionsNew.blue_noise_sampler_seed != options.blue_noise_sampler_seed)))
+    {
+        if (optionsNew.blue_noise_sampler_deterministic)
+        {
+            mt19937 gen(optionsNew.blue_noise_sampler_seed);
+            randomSeed = gen();
+        }
+        else
+        {
+            random_device rd;
+            mt19937       gen(rd());
+            randomSeed = gen();
+        }
+    }
+
+    options = optionsNew;
 }
 
 void BlueNoiseSampler::terminate() noexcept
@@ -62,5 +102,6 @@ void BlueNoiseSampler::addProgramParameters(
     gfxProgramSetParameter(gfx_, program, "g_SobolBuffer", sobolBuffer);
     gfxProgramSetParameter(gfx_, program, "g_RankingTile", rankingTileBuffer);
     gfxProgramSetParameter(gfx_, program, "g_ScramblingTile", scramblingTileBuffer);
+    gfxProgramSetParameter(gfx_, program, "g_RandomSeed", randomSeed);
 }
 } // namespace Capsaicin

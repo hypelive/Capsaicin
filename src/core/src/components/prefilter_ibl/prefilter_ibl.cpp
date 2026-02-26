@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -40,9 +40,10 @@ PrefilterIBL::~PrefilterIBL() noexcept
 
 bool PrefilterIBL::init(CapsaicinInternal const &capsaicin) noexcept
 {
-    prefilter_ibl_buffer_ = gfxCreateTextureCube(
-        gfx_, prefilter_ibl_buffer_size_, DXGI_FORMAT_R16G16B16A16_FLOAT, prefilter_ibl_buffer_mips_);
-    prefilter_ibl_buffer_.setName("Capsaicin_PrefilterIBL_PrefilterIBLBuffer");
+    prefilter_ibl_buffer_ =
+        gfxCreateTextureCube(gfx_, prefilter_ibl_buffer_size_, DXGI_FORMAT_R16G16B16A16_FLOAT,
+            prefilter_ibl_buffer_mips_, nullptr, D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
+    prefilter_ibl_buffer_.setName("PrefilterIBL_PrefilterIBLBuffer");
 
     prefilter_ibl_program_ = capsaicin.createProgram("components/prefilter_ibl/prefilter_ibl");
 

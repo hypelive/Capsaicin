@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,18 +21,24 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "math/color.hlsl"
+#include "math/eotf.hlsl"
+#include "math/tone_map.hlsl"
 
 uint2 g_BufferDimensions;
 
 Texture2D<float4> g_InputBuffer;
 RWTexture2D<float4> g_OutputBuffer;
 
-uint g_FrameIndex;
+#ifdef OUTPUT_HDR
+float g_MaxLuminance;
+float g_ExposureScale;
+#endif
 StructuredBuffer<float> g_Exposure;
 
 #if defined(DITHER_8) || defined(DITHER_10)
-#include "components/blue_noise_sampler/blue_noise_sampler.hlsl"
+uint g_FrameIndex;
 
+#include "components/blue_noise_sampler/blue_noise_sampler.hlsl"
 float3 ditherColor(in uint2 pixel, in float3 color)
 {
     BlueNoiseSampler blue_noise_sampler = MakeBlueNoiseSampler(pixel, g_FrameIndex);
@@ -58,12 +64,45 @@ void Tonemap(uint2 did : SV_DispatchThreadID)
     float3 color = g_InputBuffer[did].xyz;
 
     // Apply exposure
-    color = g_Exposure[0] * color;
+    color *= g_Exposure[0];
 
     // Apply tone mapping operator
+#ifdef OUTPUT_HDR
+    // Scale color by increased HDR white point
+    color *= g_ExposureScale;
+#   if !defined(TONEMAP_ACESFAST) && !defined(TONEMAP_ACES) && !defined(TONEMAP_AGX) && !defined(TONEMAP_REINHARDL) && !defined(TONEMAP_PBRNEUTRAL) && !defined(TONEMAP_AGXFITTED) && !defined(TONEMAP_NONE)
+#       define INVERSE_LUM
+    // Most tonemap operators operate in the 0-1 range and need to be adjusted for the actual range of the HDR output
+    // This is not ideal as a HDR aware operator should be used but for non-HDR aware operators this is a workaround
+    float adjustHDR = g_MaxLuminance / 80.0f;
+    color /= adjustHDR;
+#   endif
+#   if defined(TONEMAP_AGX)
+    color = tonemapAgx(color, g_MaxLuminance);
+#   elif defined(TONEMAP_AGXFITTED)
+    color = tonemapAgxFitted(color);
+#   elif defined(TONEMAP_UNCHARTED2)
+    color = tonemapUncharted2(color);
+#   elif defined(TONEMAP_PBRNEUTRAL)
+    color = tonemapPBRNeutral(color);
+#   elif defined(TONEMAP_ACES)
+    color = tonemapACES(color, g_MaxLuminance);
+#   elif defined(TONEMAP_ACESFITTED)
+    color = tonemapACESFitted(color);
+#   elif defined(TONEMAP_ACESFAST)
+    color = tonemapACESFast(color, g_MaxLuminance);
+#   elif defined(TONEMAP_REINHARDL)
+    color = tonemapReinhardExtendedLuminance(color, g_MaxLuminance);
+#   elif defined(TONEMAP_REINHARD)
+    color = tonemapSimpleReinhard(color);
+#   endif
+#   if defined(INVERSE_LUM)
+    color *= adjustHDR;
+#   endif
+#else // OUTPUT_HDR
 #   if defined(TONEMAP_AGX)
     color = tonemapAgx(color);
-#   elif defined(TONEMAP_AGXFitted)
+#   elif defined(TONEMAP_AGXFITTED)
     color = tonemapAgxFitted(color);
 #   elif defined(TONEMAP_UNCHARTED2)
     color = tonemapUncharted2(color);
@@ -80,8 +119,20 @@ void Tonemap(uint2 did : SV_DispatchThreadID)
 #   elif defined(TONEMAP_REINHARD)
     color = tonemapSimpleReinhard(color);
 #   endif
+#endif // OUTPUT_HDR
 
+    // Apply EOTF and colour space conversion
+#ifdef OUTPUT_SRGB
     color = convertToSRGB(color);
+#elif defined(OUTPUT_HDR10)
+    color = convertToHDR10(color);
+#elif defined(OUTPUT_SCRGB)
+#   if defined(OUTPUT_HDR)
+    color = clamp(color, 0.0f, 10000.0f);
+#   else
+    color = clamp(color, 0.0f, 12.5f);
+#   endif
+#endif
 
 #if defined(DITHER_8) || defined(DITHER_10)
     // Apply dithering to output

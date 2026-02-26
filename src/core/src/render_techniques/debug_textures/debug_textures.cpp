@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "capsaicin_internal.h"
 
+using namespace std;
+
 namespace Capsaicin
 {
 DebugTextures::DebugTextures()
@@ -113,16 +115,16 @@ void DebugTextures::renderGUI([[maybe_unused]] CapsaicinInternal &capsaicin) con
 {
     if (auto const debugView = capsaicin.getCurrentDebugView(); debugView == "DebugTexture")
     {
-        auto const &textures = capsaicin.getTextures();
-        std::string textureList;
+        auto const          &textures = capsaicin.getTextures();
+        vector<char const *> textureList;
+        textureList.reserve(textures.size());
         for (auto const &i : textures)
         {
-            textureList += i.getName();
-            textureList += '\0';
+            textureList.emplace_back(i.getName());
         }
         auto selectedTexture = static_cast<int32_t>(capsaicin.getOption<uint32_t>("debug_textures_id"));
         if (ImGui::Combo(
-                "Texture", &selectedTexture, textureList.c_str(), static_cast<int32_t>(textures.size())))
+                "Texture", &selectedTexture, textureList.data(), static_cast<int32_t>(textureList.size())))
         {
             capsaicin.setOption("debug_textures_id", static_cast<uint32_t>(selectedTexture));
         }

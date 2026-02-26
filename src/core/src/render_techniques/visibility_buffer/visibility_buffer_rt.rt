@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2023 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#define USE_INLINE_RT 0
+
 #include "visibility_buffer_rt.comp"
 
 TriangleHitGroup VisibilityRTHitGroup =
@@ -30,8 +32,8 @@ TriangleHitGroup VisibilityRTHitGroup =
 
 RaytracingShaderConfig VisibilityShaderConfig =
 {
-    8, // max payload size
-    8 // max attribute size
+    sizeof(PathData), // max payload size
+    sizeof(BuiltInTriangleIntersectionAttributes) // max attribute size
 };
 
 RaytracingPipelineConfig VisibilityPipelineConfig =
@@ -60,7 +62,7 @@ void VisibilityRTAnyHit(inout PathData path, in BuiltInTriangleIntersectionAttri
 [shader("closesthit")]
 void VisibilityRTClosestHit(inout PathData path, in BuiltInTriangleIntersectionAttributes attr)
 {
-    pathHit(path, GetRayDescRt(), GetHitInfoRt(attr));
+    pathHit(path, GetHitInfoRt(attr));
 }
 
 [shader("miss")]

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -49,7 +49,7 @@ RWStructuredBuffer<uint> g_GlossyReflections_RtSampleCountBuffer;
 //! Glossy reflections common functions.
 //!
 
-// 
+//
 int  GlossyReflections_FullRadius()
 {
     return g_GlossyReflectionsConstants.half_res
@@ -120,7 +120,7 @@ int2 GlossyReflections_HalfToFullRes(in int2 half_pos)
         : (half_pos);
 }
 
-// 
+//
 int2 GlossyReflections_SplitToFullRes(in int2 split_pos)
 {
     return g_GlossyReflectionsConstants.half_res
@@ -128,25 +128,25 @@ int2 GlossyReflections_SplitToFullRes(in int2 split_pos)
         : (split_pos);
 }
 
-// 
+//
 int2 GlossyReflections_FullToHalfRes(in int2 full_pos)
 {
     return g_GlossyReflectionsConstants.half_res ? full_pos >> 1 : full_pos;
 }
 
-// 
+//
 int  GlossyReflections_FullToHalfRadius(in int full_radius)
 {
     return g_GlossyReflectionsConstants.half_res ? (full_radius + 1) >> 1 : full_radius;
 }
 
-// 
+//
 bool GlossyReflections_QueueSample(in int2 full_pos)
 {
     return g_GlossyReflectionsConstants.half_res ? all(GlossyReflections_HalfToFullRes(full_pos >> 1) == full_pos) : true;
 }
 
-// 
+//
 uint GlossyReflections_PackSample(in uint2 seed)
 {
     return ((seed.y & 0xFFFF) <<  0) |
@@ -160,7 +160,7 @@ uint2 GlossyReflections_UnpackSample(in uint packed_sample)
                  (packed_sample >>  0) & 0xFFFF);
 }
 
-// 
+//
 float GlossyReflections_NeighborhoodFilter(in float i, in float radius)
 {
     const float k = 3.0f;

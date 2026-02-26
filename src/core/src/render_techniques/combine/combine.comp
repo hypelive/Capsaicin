@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,21 @@ THE SOFTWARE.
 
 #include "gpu_shared.h"
 
-#ifdef HAS_DIRECT_LIGHTING_BUFFER
+#ifdef HAS_DI_BUFFER
+#   ifdef HAS_SPLIT_DI_OUTPUT
+Texture2D g_DirectLightingDiffuseBuffer;
+Texture2D g_DirectLightingSpecularBuffer;
+#   else
 Texture2D g_DirectLightingBuffer;
+#   endif
 #endif
-#ifdef HAS_GLOBAL_ILLUMINATION_BUFFER
+#ifdef HAS_GI_BUFFER
+#   ifdef HAS_SPLIT_GI_OUTPUT
+Texture2D g_GlobalIlluminationDiffuseBuffer;
+Texture2D g_GlobalIlluminationSpecularBuffer;
+#   else
 Texture2D g_GlobalIlluminationBuffer;
+#   endif
 #endif
 #ifdef HAS_EMISSION_BUFFER
 Texture2D g_EmissionBuffer;
@@ -41,11 +51,21 @@ RWTexture2D<float4> g_ColorBuffer;
 void main(in uint2 did : SV_DispatchThreadID)
 {
     float3 colour = 0.0f.xxx;
-#ifdef HAS_DIRECT_LIGHTING_BUFFER
+#ifdef HAS_DI_BUFFER
+#   ifdef HAS_SPLIT_DI_OUTPUT
+    colour += g_DirectLightingDiffuseBuffer.Load(int3(did, 0)).xyz;
+    colour += g_DirectLightingSpecularBuffer.Load(int3(did, 0)).xyz;
+#   else
     colour += g_DirectLightingBuffer.Load(int3(did, 0)).xyz;
+#   endif
 #endif
-#ifdef HAS_GLOBAL_ILLUMINATION_BUFFER
+#ifdef HAS_GI_BUFFER
+#   ifdef HAS_SPLIT_GI_OUTPUT
+    colour += g_GlobalIlluminationDiffuseBuffer.Load(int3(did, 0)).xyz;
+    colour += g_GlobalIlluminationSpecularBuffer.Load(int3(did, 0)).xyz;
+#   else
     colour += g_GlobalIlluminationBuffer.Load(int3(did, 0)).xyz;
+#   endif
 #endif
 #ifdef HAS_EMISSION_BUFFER
     colour += g_EmissionBuffer.Load(int3(did, 0)).xyz;

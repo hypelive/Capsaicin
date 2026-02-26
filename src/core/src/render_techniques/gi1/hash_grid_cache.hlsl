@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,8 @@ THE SOFTWARE.
 
 #ifndef HASH_GRID_CACHE_HLSL
 #define HASH_GRID_CACHE_HLSL
+
+#include "math/pack.hlsl"
 
 // The number of frames before an unused tile is evicted and returned to the pool:
 #define kHashGridCache_TileDecay     50
@@ -52,30 +54,36 @@ RWStructuredBuffer<uint>   g_HashGridCache_BuffersUint[]   : register(space96);
 RWStructuredBuffer<uint2>  g_HashGridCache_BuffersUint2[]  : register(space97);
 RWStructuredBuffer<float4> g_HashGridCache_BuffersFloat4[] : register(space98);
 
-#define                    g_HashGridCache_HashBuffer                    g_HashGridCache_BuffersUint  [HASHGRIDCACHE_HASHBUFFER]
-#define                    g_HashGridCache_DecayCellBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DECAYCELLBUFFER]
-#define                    g_HashGridCache_DecayTileBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DECAYTILEBUFFER]
-#define                    g_HashGridCache_ValueBuffer                   g_HashGridCache_BuffersUint2 [HASHGRIDCACHE_VALUEBUFFER]
-#define                    g_HashGridCache_UpdateTileBuffer              g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATETILEBUFFER]
-#define                    g_HashGridCache_UpdateTileCountBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATETILECOUNTBUFFER]
-#define                    g_HashGridCache_UpdateCellValueBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATECELLVALUEBUFFER]
-#define                    g_HashGridCache_VisibilityBuffer              g_HashGridCache_BuffersFloat4[HASHGRIDCACHE_VISIBILITYBUFFER]
-#define                    g_HashGridCache_VisibilityCountBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYCOUNTBUFFER]
-#define                    g_HashGridCache_VisibilityCellBuffer          g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYCELLBUFFER]
-#define                    g_HashGridCache_VisibilityQueryBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYQUERYBUFFER]
-#define                    g_HashGridCache_VisibilityRayBuffer           g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYRAYBUFFER]
-#define                    g_HashGridCache_VisibilityRayCountBuffer      g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYRAYCOUNTBUFFER]
-#define                    g_HashGridCache_PackedTileCountBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILECOUNTBUFFER0 + g_HashGridCacheConstants.buffer_ping_pong]
-#define                    g_HashGridCache_PreviousPackedTileCountBuffer g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILECOUNTBUFFER1 - g_HashGridCacheConstants.buffer_ping_pong]
-#define                    g_HashGridCache_PackedTileIndexBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILEINDEXBUFFER0 + g_HashGridCacheConstants.buffer_ping_pong]
-#define                    g_HashGridCache_PreviousPackedTileIndexBuffer g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILEINDEXBUFFER1 - g_HashGridCacheConstants.buffer_ping_pong]
-#define                    g_HashGridCache_DebugCellBuffer               g_HashGridCache_BuffersFloat4[HASHGRIDCACHE_DEBUGCELLBUFFER]
-#define                    g_HashGridCache_BucketOccupancyBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_BUCKETOCCUPANCYBUFFER]
-#define                    g_HashGridCache_BucketOverflowCountBuffer     g_HashGridCache_BuffersUint  [HASHGRIDCACHE_BUCKETOVERFLOWCOUNTBUFFER]
-#define                    g_HashGridCache_BucketOverflowBuffer          g_HashGridCache_BuffersUint  [HASHGRIDCACHE_BUCKETOVERFLOWBUFFER]
-#define                    g_HashGridCache_FreeBucketCountBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_FREEBUCKETBUFFER]
-#define                    g_HashGridCache_UsedBucketCountBuffer         g_HashGridCache_BuffersUint  [HASHGRIDCACHE_USEDBUCKETBUFFER]
-#define                    g_HashGridCache_StatsBuffer                   g_HashGridCache_BuffersFloat [HASHGRIDCACHE_STATSBUFFER]
+#define                    g_HashGridCache_HashBuffer                          g_HashGridCache_BuffersUint  [HASHGRIDCACHE_HASHBUFFER]
+#define                    g_HashGridCache_DecayTileBuffer                     g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DECAYTILEBUFFER]
+#define                    g_HashGridCache_ValueBuffer                         g_HashGridCache_BuffersUint2 [HASHGRIDCACHE_VALUEBUFFER]
+#define                    g_HashGridCache_ValueIndirectBuffer                 g_HashGridCache_BuffersUint2 [HASHGRIDCACHE_VALUEINDIRECTBUFFER]
+#define                    g_HashGridCache_UpdateTileBuffer                    g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATETILEBUFFER]
+#define                    g_HashGridCache_UpdateTileCountBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATETILECOUNTBUFFER]
+#define                    g_HashGridCache_UpdateCellValueBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATECELLVALUEBUFFER]
+#define                    g_HashGridCache_UpdateCellValueIndirectBuffer       g_HashGridCache_BuffersUint  [HASHGRIDCACHE_UPDATECELLVALUEINDIRECTBUFFER]
+#define                    g_HashGridCache_VisibilityBuffer                    g_HashGridCache_BuffersFloat4[HASHGRIDCACHE_VISIBILITYBUFFER]
+#define                    g_HashGridCache_VisibilityCountBuffer0              g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYCOUNTBUFFER0]
+#define                    g_HashGridCache_VisibilityCountBuffer1              g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYCOUNTBUFFER1]
+#define                    g_HashGridCache_VisibilityCellBuffer                g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYCELLBUFFER]
+#define                    g_HashGridCache_VisibilityQueryBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYQUERYBUFFER]
+#define                    g_HashGridCache_VisibilityRayBuffer                 g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYRAYBUFFER]
+#define                    g_HashGridCache_VisibilityRayCountBuffer            g_HashGridCache_BuffersUint  [HASHGRIDCACHE_VISIBILITYRAYCOUNTBUFFER]
+#define                    g_HashGridCache_MultibounceInfoBuffer               g_HashGridCache_BuffersUint2[HASHGRIDCACHE_MULTIBOUNCEINFOBUFFER]
+#define                    g_HashGridCache_ResolveCountBuffer                  g_HashGridCache_BuffersUint  [HASHGRIDCACHE_RESOLVECOUNTBUFFER]
+#define                    g_HashGridCache_ResolveBuffer                       g_HashGridCache_BuffersUint  [HASHGRIDCACHE_RESOLVEBUFFER]
+#define                    g_HashGridCache_PackedTileCountBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILECOUNTBUFFER0 + g_HashGridCacheConstants.buffer_ping_pong]
+#define                    g_HashGridCache_PreviousPackedTileCountBuffer       g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILECOUNTBUFFER1 - g_HashGridCacheConstants.buffer_ping_pong]
+#define                    g_HashGridCache_PackedTileIndexBuffer               g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILEINDEXBUFFER0 + g_HashGridCacheConstants.buffer_ping_pong]
+#define                    g_HashGridCache_PreviousPackedTileIndexBuffer       g_HashGridCache_BuffersUint  [HASHGRIDCACHE_PACKEDTILEINDEXBUFFER1 - g_HashGridCacheConstants.buffer_ping_pong]
+#define                    g_HashGridCache_DebugCellBuffer                     g_HashGridCache_BuffersFloat4[HASHGRIDCACHE_DEBUGCELLBUFFER]
+#define                    g_HashGridCache_DebugDecayCellBuffer                g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGDECAYCELLBUFFER]
+#define                    g_HashGridCache_DebugStatsBucketOccupancyBuffer     g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGSTATSBUCKETOCCUPANCYBUFFER]
+#define                    g_HashGridCache_DebugStatsBucketOverflowCountBuffer g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGSTATSBUCKETOVERFLOWCOUNTBUFFER]
+#define                    g_HashGridCache_DebugStatsBucketOverflowBuffer      g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGSTATSBUCKETOVERFLOWBUFFER]
+#define                    g_HashGridCache_DebugStatsFreeBucketCountBuffer     g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGSTATSFREEBUCKETBUFFER]
+#define                    g_HashGridCache_DebugStatsUsedBucketCountBuffer     g_HashGridCache_BuffersUint  [HASHGRIDCACHE_DEBUGSTATSUSEDBUCKETBUFFER]
+#define                    g_HashGridCache_DebugStatsBuffer                    g_HashGridCache_BuffersFloat [HASHGRIDCACHE_DEBUGSTATSBUFFER]
 
 //!
 //! Hash-grid radiance caching common functions.
@@ -261,8 +269,8 @@ uint HashGridCache_InsertCell(in HashGridCache_Data data, out uint tile_index, o
     {
     #ifdef DEBUG_HASH_STATS
         uint previous_value;
-        InterlockedAdd(g_HashGridCache_BucketOverflowCountBuffer[desc.bucket_index], 1, previous_value);
-    #endif        
+        InterlockedAdd(g_HashGridCache_DebugStatsBucketOverflowCountBuffer[desc.bucket_index], 1, previous_value);
+    #endif
         return kGI1_InvalidId; // too much collisions, out of tiles :(
     }
 
@@ -347,27 +355,25 @@ void HashGridCache_UnpackCell(in float4 packed_entry, out float3 position, out f
 // Packs the radiance for storing inside the hash grid.
 uint2 HashGridCache_PackRadiance(in float4 radiance)
 {
-    return (f32tof16(radiance.xy) << 16) | f32tof16(float2(radiance.zw));
+    return packHalf4(radiance);
 }
 
 // Unpacks the radiance from its packed format inside the hash grid.
 float4 HashGridCache_UnpackRadiance(in uint2 packed_radiance)
 {
-    return float4(f16tof32(packed_radiance >> 16), f16tof32(packed_radiance & 0xFFFFu));
+    return unpackHalf4(packed_radiance);
 }
 
 // Packs the direction used for looking up the hash grid.
 uint HashGridCache_PackDirection(in float3 direction)
 {
-    uint3 packed_direction = uint3(round(255.0f * (0.5f * direction + 0.5f)));
-    return (packed_direction.x << 16) | (packed_direction.y << 8) | packed_direction.z;
+    return packNormal(direction);
 }
 
 // Unpacks the direction used for looking up the hash grid.
 float3 HashGridCache_UnpackDirection(in uint packed_direction)
 {
-    uint3 direction = uint3(packed_direction >> 16, packed_direction >> 8, packed_direction) & 0xFFu;
-    return normalize(2.0f * direction / 255.0f - 1.0f);
+    return normalize(unpackNormal(packed_direction));
 }
 
 float4 HashGridCache_PackVisibility(HashGridCache_Visibility visibility)
@@ -390,6 +396,28 @@ HashGridCache_Visibility HashGridCache_UnpackVisibility(in float4 packed_visibil
     return visibility;
 }
 
+uint HashGridCache_PackColor(float3 albedo)
+{
+    return packColor(albedo);
+}
+
+float3 HashGridCache_UnpackColor(uint packed)
+{
+    return unpackColor(packed);
+}
+
+// Packs the evaluated brdf and pdf for multibounce lookups.
+uint2 HashGridCache_PackBRDF(in float3 brdf, float pdf)
+{
+    return packHalf4(float4(brdf, pdf));
+}
+
+// Unpacks the direction used for looking up the hash grid.
+float4 HashGridCache_UnpackBRDF(in uint2 packed_data)
+{
+    return unpackHalf4(packed_data);
+}
+
 float3 HashGridCache_HeatColor(float heatValue)
 {
     // 0 -> Red, 0.5 -> Blue, 1.0 -> Green
@@ -403,39 +431,65 @@ float3 HashGridCache_HeatColor(float heatValue)
     return heatColor;
 }
 
-float4 HashGridCache_FilteredRadiance(uint cell_index_mip0, bool debug_mip_level)
+void HashGridCache_FilteredRadianceIndirect(uint cell_index_mip0, bool debug_mip_level, out float4 indirect_radiance)
 {
     uint2 cell_offset_mip0;
-    uint  tile_index      = HashGridCache_CellOffsetMip0(cell_index_mip0, cell_offset_mip0);
+    uint  tile_index = HashGridCache_CellOffsetMip0(cell_index_mip0, cell_offset_mip0);
     uint  cell_index_mip1 = g_HashGridCacheConstants.size_tile_mip1 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 1) : kGI1_InvalidId;
     uint  cell_index_mip2 = g_HashGridCacheConstants.size_tile_mip2 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 2) : kGI1_InvalidId;
     uint  cell_index_mip3 = g_HashGridCacheConstants.size_tile_mip3 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 3) : kGI1_InvalidId;
 
     // Select best mip
-    float4 radiance;
-    bool   use_mip;
+    bool use_mip;
 
     // Mip 0
-    radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip0]);
-    radiance = debug_mip_level            ? float4(HashGridCache_HeatColor(1.000f), radiance.w) : radiance;
+    indirect_radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[cell_index_mip0]);
+    indirect_radiance = debug_mip_level ? float4(HashGridCache_HeatColor(1.000f), indirect_radiance.w) : indirect_radiance;
 
     // Mip 1
-    use_mip  = radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip1 != kGI1_InvalidId;
-    radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip1]) : radiance;
-    radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.666f), radiance.w) : radiance;
+    use_mip = indirect_radiance.w < g_HashGridCacheConstants.max_multibounce_sample_count && cell_index_mip1 != kGI1_InvalidId;
+    indirect_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[cell_index_mip1]) : indirect_radiance;
+    indirect_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.666f), indirect_radiance.w) : indirect_radiance;
 
     // Mip 2
-    use_mip  = radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip2 != kGI1_InvalidId;
-    radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip2]) : radiance;
-    radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.333f), radiance.w) : radiance;
+    use_mip = indirect_radiance.w < g_HashGridCacheConstants.max_multibounce_sample_count && cell_index_mip2 != kGI1_InvalidId;
+    indirect_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[cell_index_mip2]) : indirect_radiance;
+    indirect_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.333f), indirect_radiance.w) : indirect_radiance;
 
     // Mip 3
-    use_mip  = radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip3 != kGI1_InvalidId;
-    radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip3]) : radiance;
-    radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.000f), radiance.w) : radiance;
-
-    // Done
-    return radiance;
+    use_mip = indirect_radiance.w < g_HashGridCacheConstants.max_multibounce_sample_count && cell_index_mip3 != kGI1_InvalidId;
+    indirect_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueIndirectBuffer[cell_index_mip3]) : indirect_radiance;
+    indirect_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.000f), indirect_radiance.w) : indirect_radiance;
 }
 
+void HashGridCache_FilteredRadianceDirect(uint cell_index_mip0, bool debug_mip_level, out float4 direct_radiance)
+{
+    uint2 cell_offset_mip0;
+    uint  tile_index = HashGridCache_CellOffsetMip0(cell_index_mip0, cell_offset_mip0);
+    uint  cell_index_mip1 = g_HashGridCacheConstants.size_tile_mip1 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 1) : kGI1_InvalidId;
+    uint  cell_index_mip2 = g_HashGridCacheConstants.size_tile_mip2 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 2) : kGI1_InvalidId;
+    uint  cell_index_mip3 = g_HashGridCacheConstants.size_tile_mip3 > 0 ? HashGridCache_CellIndex(cell_offset_mip0, tile_index, 3) : kGI1_InvalidId;
+
+    // Select best mip
+    bool use_mip;
+
+    // Mip 0
+    direct_radiance = HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip0]);
+    direct_radiance = debug_mip_level ? float4(HashGridCache_HeatColor(1.000f), direct_radiance.w) : direct_radiance;
+
+    // Mip 1
+    use_mip = direct_radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip1 != kGI1_InvalidId;
+    direct_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip1]) : direct_radiance;
+    direct_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.666f), direct_radiance.w) : direct_radiance;
+
+    // Mip 2
+    use_mip = direct_radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip2 != kGI1_InvalidId;
+    direct_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip2]) : direct_radiance;
+    direct_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.333f), direct_radiance.w) : direct_radiance;
+
+    // Mip 3
+    use_mip = direct_radiance.w < g_HashGridCacheConstants.max_sample_count && cell_index_mip3 != kGI1_InvalidId;
+    direct_radiance = use_mip ? HashGridCache_UnpackRadiance(g_HashGridCache_ValueBuffer[cell_index_mip3]) : direct_radiance;
+    direct_radiance = debug_mip_level && use_mip ? float4(HashGridCache_HeatColor(0.000f), direct_radiance.w) : direct_radiance;
+}
 #endif // HASH_GRID_CACHE_HLSL

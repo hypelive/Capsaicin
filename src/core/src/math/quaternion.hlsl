@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,6 @@ class Quaternion
 
     /**
      * Calculates the inverse of a quaternion.
-     * @param quaternion The input quaternion.
      * @return The inverted quaternion.
      */
     Quaternion inverse()
@@ -41,7 +40,6 @@ class Quaternion
 
     /**
      * Calculates the transformation of a vector and a quaternion.
-     * @param quaternion The input quaternion.
      * @param direction The input direction.
      * @return The inverted quaternion.
      */
@@ -54,7 +52,7 @@ class Quaternion
 
 /**
  * Calculates a rotation quaternion based on rotation around positive Z axis.
- * @param values The direction vector to calculate the angle between it and Z axis.
+ * @param direction The direction vector to calculate the angle between it and Z axis.
  * @return The created quaternion.
  */
 Quaternion QuaternionRotationZ(float3 direction)

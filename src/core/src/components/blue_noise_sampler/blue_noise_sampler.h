@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -43,6 +43,26 @@ public:
     BlueNoiseSampler &operator=(BlueNoiseSampler const &other)     = delete;
     BlueNoiseSampler &operator=(BlueNoiseSampler &&other) noexcept = delete;
 
+    /*
+     * Gets configuration options for current technique.
+     * @return A list of all valid configuration options.
+     */
+    RenderOptionList getRenderOptions() noexcept override;
+
+    struct RenderOptions
+    {
+        bool     blue_noise_sampler_deterministic = true; /**< Use deterministic seeding of random numbers */
+        uint32_t blue_noise_sampler_seed =
+            0; /**< Seed for random number generation (only used in deterministic mode) */
+    };
+
+    /**
+     * Convert render options to internal options format.
+     * @param options Current render options.
+     * @return The options converted.
+     */
+    static RenderOptions convertOptions(RenderOptionList const &options) noexcept;
+
     /**
      * Initialise any internal data or state.
      * @note This is automatically called by the framework after construction and should be used to create
@@ -71,8 +91,10 @@ public:
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
 private:
-    GfxBuffer sobolBuffer;
-    GfxBuffer rankingTileBuffer;
-    GfxBuffer scramblingTileBuffer;
+    RenderOptions options;
+    GfxBuffer     sobolBuffer;
+    GfxBuffer     rankingTileBuffer;
+    GfxBuffer     scramblingTileBuffer;
+    uint32_t      randomSeed = 0;
 };
 } // namespace Capsaicin

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -44,10 +44,22 @@ public:
 
     struct RenderOptions
     {
-        bool     tonemap_enable = true;
-        uint32_t tonemap_operator =
-            5; /**< Operator to use (0=None, 1=ReinhardSimple, 2=ReinhardLuminance,
-                  3=ACESFast, 4=ACESFitted, 5=ACES, 6=PBRNeutral, 7=Uncharted2, 8=AgxFitted, 9=Agx) */
+        enum class TonemapOperator : uint8_t
+        {
+            None,
+            ReinhardSimple,
+            ReinhardLuminance,
+            ACESFast,
+            ACESFitted,
+            ACES,
+            PBRNeutral,
+            Uncharted2,
+            AgxFitted,
+            Agx
+        };
+
+        bool    tonemap_enable   = true;
+        uint8_t tonemap_operator = static_cast<uint8_t>(TonemapOperator::ACES);
     };
 
     /**
@@ -112,9 +124,11 @@ private:
 
     RenderOptions options;
 
-    DXGI_COLOR_SPACE_TYPE colourSpace =
-        DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709; /**< Current working space of the display */
-    bool usingDither = false; /**< Whether dithering is being used based on display format */
+    DXGI_COLOR_SPACE_TYPE colourSpace;         /**< Current working space of the display */
+    bool                  usingDither = false; /**< Whether dithering is being used based on display format */
+    bool                  usingHDR    = false; /**< Whether HDR output is being used */
+    float                 maxLuminance  = 1.0F; /**< Maximum luminance of the current display */
+    float                 exposureScale = 1.0F; /**< Exposure scale for HDR reference white setting */
 
     GfxProgram toneMappingProgram;
     GfxKernel  toneMapKernel;

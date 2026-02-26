@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include <array>
 #include <capsaicin.h>
 #include <cinttypes>
+#include <filesystem>
 #include <gfx_window.h>
 #include <glm/glm.hpp>
 #include <string_view>
@@ -77,6 +78,12 @@ protected:
      * @param level Logging level of current message.
      */
     void printString(std::string const &text, MessageLevel level = MessageLevel::Info) noexcept;
+
+    /**
+     * Initialise internal gfx specific data.
+     * @return Boolean signalling if no error occurred.
+     */
+    bool initialiseGfx();
 
     /**
      * Initialise internal capsaicin data.
@@ -145,15 +152,20 @@ protected:
 
     /**
      * Save the currently displayed frame to disk.
-     * @note Saves to default 'dump' subdirectory.
+     * Should be called before gfxFrame() but after render.
      */
     void saveFrame() noexcept;
+
+    /**
+     * Save profiling information to disk.
+     */
+    void saveProfiling() noexcept;
 
     /**
      * Get the common base file name based on current capsaicin settings.
      * @return String containing base name.
      */
-    [[nodiscard]] static std::filesystem::path getSaveName();
+    [[nodiscard]] std::filesystem::path getSaveName();
 
     /**
      * Callback function for getting window drag & drop events.
@@ -189,15 +201,26 @@ protected:
 
     std::string programName;    /**< Stored name for the current program */
     bool benchmarkMode = false; /**< If enabled this prevents user inputs and runs a predefined benchmark */
+    bool benchmarkCaptureFrames  = true; /**< Whether frame images should be captured in benchmark mode */
+    bool benchmarkCaptureTimings = true; /**< Whether timings data should be captured in benchmark mode */
     uint32_t benchmarkModeFrameCount =
         512; /**< The number of frames to be rendered during benchmarking mode */
-    uint32_t benchmarkModeStartFrame =
-        std::numeric_limits<uint32_t>::max(); /**< The first frame to start saving images at in
-                         benchmark mode (default is just the last frame) */
+    uint32_t benchmarkModeTimingCaptureStartFrame =
+        std::numeric_limits<uint32_t>::max(); /**< First frame to start timings capture in benchmark mode
+                                                 (default is just the last frame). */
+    uint32_t benchmarkModeImageCaptureStartFrame =
+        std::numeric_limits<uint32_t>::max(); /**< First frame to start frame image capture in benchmark
+                                                      mode (default is just the last frame). */
     std::string benchmarkModeSuffix;          /**< String appended to any saved files */
     bool        saveAsJPEG      = false;      /**< File type selector for dump frame */
     bool        saveImage       = false;      /**< Used to buffer save image requests */
     bool        reDisableRender = false;      /**< Use to render only a single frame at a time */
+    bool        useHDR          = true;       /**< Use HDR for output window, if false then SDR is used */
+    bool        drawUI          = true;       /**< Whether the overlay UI should be drawn */
 
     bool hasConsole = false; /**< Set if a console output terminal is attached */
+
+    std::vector<std::vector<Capsaicin::NodeTimestamps>> profilingData;
+
+    std::filesystem::path dumpFolder = "./dump/";
 };

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -51,21 +51,32 @@ Skybox::RenderOptions Skybox::convertOptions(RenderOptionList const &options) no
 SharedTextureList Skybox::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"DirectLighting", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-        DXGI_FORMAT_R16G16B16A16_FLOAT});
-    textures.push_back({"Velocity", SharedTexture::Access::Write, SharedTexture::Flags::None,
-        DXGI_FORMAT_R16G16_FLOAT});
-    textures.push_back({"Depth", SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "DirectLighting",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::Clear | SharedTexture::Flags::Optional,
+        .format               = DXGI_FORMAT_R16G16B16A16_FLOAT,
+        .require              = "!DirectLightingDiffuse"});
+    textures.push_back({.name = "DirectLightingDiffuse",
+        .access               = SharedTexture::Access::ReadWrite,
+        .flags                = SharedTexture::Flags::Clear | SharedTexture::Flags::Optional,
+        .format               = DXGI_FORMAT_R16G16B16A16_FLOAT,
+        .require              = "!DirectLighting"});
+    textures.push_back({.name = "Velocity",
+        .access               = SharedTexture::Access::Write,
+        .flags                = SharedTexture::Flags::None,
+        .format               = DXGI_FORMAT_R16G16_FLOAT});
+    textures.push_back({.name = "Depth", .access = SharedTexture::Access::ReadWrite});
     return textures;
 }
 
 bool Skybox::init(CapsaicinInternal const &capsaicin) noexcept
 {
     GfxDrawState const skybox_draw_state;
-    gfxDrawStateSetColorTarget(
-        skybox_draw_state, 0, capsaicin.getSharedTexture("DirectLighting").getFormat());
-    gfxDrawStateSetColorTarget(
-        skybox_draw_state, 1, capsaicin.getSharedTexture("Velocity").getFormat());
+    gfxDrawStateSetColorTarget(skybox_draw_state, 0,
+        (capsaicin.hasSharedTexture("DirectLighting") ? capsaicin.getSharedTexture("DirectLighting")
+                                                      : capsaicin.getSharedTexture("DirectLightingDiffuse"))
+            .getFormat());
+    gfxDrawStateSetColorTarget(skybox_draw_state, 1, capsaicin.getSharedTexture("Velocity").getFormat());
     gfxDrawStateSetDepthStencilTarget(skybox_draw_state, capsaicin.getSharedTexture("Depth").getFormat());
     gfxDrawStateSetDepthWriteMask(skybox_draw_state, D3D12_DEPTH_WRITE_MASK_ZERO);
     gfxDrawStateSetDepthFunction(skybox_draw_state, D3D12_COMPARISON_FUNC_GREATER);
@@ -96,7 +107,9 @@ void Skybox::render(CapsaicinInternal &capsaicin) noexcept
     gfxProgramSetParameter(gfx_, skybox_program_, "g_EnvironmentBuffer", capsaicin.getEnvironmentBuffer());
     gfxProgramSetParameter(gfx_, skybox_program_, "g_LinearSampler", capsaicin.getLinearSampler());
 
-    gfxCommandBindColorTarget(gfx_, 0, capsaicin.getSharedTexture("DirectLighting"));
+    gfxCommandBindColorTarget(gfx_, 0,
+        capsaicin.hasSharedTexture("DirectLighting") ? capsaicin.getSharedTexture("DirectLighting")
+                                                     : capsaicin.getSharedTexture("DirectLightingDiffuse"));
     gfxCommandBindColorTarget(gfx_, 1, capsaicin.getSharedTexture("Velocity"));
     gfxCommandBindDepthStencilTarget(gfx_, capsaicin.getSharedTexture("Depth"));
 

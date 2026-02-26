@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,159 +32,155 @@ SamplerState g_TextureSampler;
 
 #include "components/light_builder/light_builder.hlsl"
 #include "lights/light_sampling.hlsl"
-#include "math/random.hlsl"
 #ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
 #include "lights/reservoir.hlsl"
 #endif
 
-struct LightSamplerUniform
+/**
+ * Get a sample light.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG Random number generator used to sample lights.
+ * @param position Current position on surface.
+ * @param normal   Shading normal vector at current position.
+ * @param lightPDF (Out) The PDF for the calculated sample (is equal to zero if no valid samples could be found).
+ * @return The index of the new light sample
+ */
+template<typename RNG>
+uint sampleLights(inout RNG randomNG, float3 position, float3 normal, out float lightPDF)
 {
-    Random randomNG;
+    uint totalLights = getNumberLights();
 
-    /**
-     * Get a sample light.
-     * @param position Current position on surface.
-     * @param normal   Shading normal vector at current position.
-     * @param lightPDF (Out) The PDF for the calculated sample (is equal to zero if no valid samples could be found).
-     * @return The index of the new light sample
-     */
-    uint sampleLights(float3 position, float3 normal, out float lightPDF)
+    // Return invalid sample if there are no lights
+    if (totalLights == 0)
     {
-        float totalLights = getNumberLights();
-
-        // Return invalid sample if there are no lights
-        if (totalLights == 0)
-        {
-            lightPDF = 0.0f;
-            return 0;
-        }
-
-        // Choose a light to sample from
-        lightPDF = 1.0f / totalLights;
-        uint lightIndex = randomNG.randInt(totalLights);
-        return lightIndex;
+        lightPDF = 0.0f;
+        return 0;
     }
 
-    /**
-     * Calculate the PDF of sampling a given light.
-     * @param lightID  The index of the given light.
-     * @param position The position on the surface currently being shaded.
-     * @param normal   Shading normal vector at current position.
-     * @return The calculated PDF with respect to the light.
-     */
-    float sampleLightPDF(uint lightID, float3 position, float3 normal)
-    {
-        return 1.0f / getNumberLights();
-    }
-
-#ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
-    /**
-     * Sample multiple lights into a reservoir.
-     * @tparam numSampledLights Number of lights to sample.
-     * @param position      Current position on surface.
-     * @param normal        Shading normal vector at current position.
-     * @param viewDirection View direction vector at current position.
-     * @param solidAngle    Solid angle around view direction of visible ray cone.
-     * @param material      Material for current surface position.
-     * @return Reservoir containing combined samples.
-     */
-    template<uint numSampledLights>
-    Reservoir sampleLightList(float3 position, float3 normal, float3 viewDirection, MaterialBRDF material)
-    {
-        // Check if we actually have any lights
-        const uint totalLights = getNumberLights();
-        const uint numLights = numSampledLights;
-
-        // Return invalid sample if there are no lights
-        if (numLights == 0)
-        {
-            return MakeReservoir();
-        }
-
-        // Create reservoir updater
-        ReservoirUpdater updater = MakeReservoirUpdater();
-
-        // Loop through until we have the requested number of lights
-        float lightPDF = 1.0f / totalLights;
-
-        for (uint lightsAdded = 0; lightsAdded < numLights; ++lightsAdded)
-        {
-            // Choose a light to sample from
-            const uint lightIndex = randomNG.randInt(totalLights);
-
-            // Add the light sample to the reservoir
-            updateReservoir(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, numLights);
-        }
-
-        // Get finalised reservoir for return
-        return updater.reservoir;
-    }
-
-    /**
-     * Sample multiple lights into a reservoir using cone angle.
-     * @tparam numSampledLights Number of lights to sample.
-     * @param position      Current position on surface.
-     * @param normal        Shading normal vector at current position.
-     * @param viewDirection View direction vector at current position.
-     * @param solidAngle    Solid angle around view direction of visible ray cone.
-     * @param material      Material for current surface position.
-     * @return Reservoir containing combined samples.
-     */
-    template<uint numSampledLights>
-    Reservoir sampleLightListCone(float3 position, float3 normal, float3 viewDirection, float solidAngle, MaterialBRDF material)
-    {
-        // Check if we actually have any lights
-        const uint totalLights = getNumberLights();
-        const uint numLights = numSampledLights;
-
-        // Return invalid sample if there are no lights
-        if (numLights == 0)
-        {
-            return MakeReservoir();
-        }
-
-        // Create reservoir updater
-        ReservoirUpdater updater = MakeReservoirUpdater();
-
-        // Loop through until we have the requested number of lights
-        float lightPDF = 1.0f / totalLights;
-
-        for (uint lightsAdded = 0; lightsAdded < numLights; ++lightsAdded)
-        {
-            // Choose a light to sample from
-            const uint lightIndex = randomNG.randInt(totalLights);
-
-            // Add the light sample to the reservoir
-            updateReservoirCone(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, solidAngle, numLights);
-        }
-
-        // Get finalised reservoir for return
-        return updater.reservoir;
-    }
-
-    /**
-     * Calculate the PDF of sampling a given light using one of the reservoir list sampling functions.
-     * @tparam numSampledLights Number of lights sampled.
-     * @param lightID  The index of the given light.
-     * @param position The position on the surface currently being shaded.
-     * @param normal   Shading normal vector at current position.
-     * @return The calculated PDF with respect to the light.
-     */
-    template<uint numSampledLights>
-    float sampleLightListPDF(uint lightID, float3 position, float3 normal)
-    {
-        return sampleLightPDF(lightID, position, normal);
-    }
-#endif
-};
-
-LightSamplerUniform MakeLightSampler(Random random)
-{
-    LightSamplerUniform ret;
-    ret.randomNG = random;
-    return ret;
+    // Choose a light to sample from
+    lightPDF = 1.0f / (float)totalLights;
+    uint lightIndex = randomNG.randInt(totalLights);
+    return lightIndex;
 }
 
-typedef LightSamplerUniform LightSampler;
+/**
+ * Calculate the PDF of sampling a given light.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG Random number generator used to sample lights.
+ * @param lightID  The index of the given light.
+ * @param position The position on the surface currently being shaded.
+ * @param normal   Shading normal vector at current position.
+ * @return The calculated PDF with respect to the light.
+ */
+template<typename RNG>
+float sampleLightsPDF(inout RNG randomNG, uint lightID, float3 position, float3 normal)
+{
+    return 1.0f / (float)getNumberLights();
+}
+
+#ifdef LIGHT_SAMPLER_ENABLE_RESERVOIR
+/**
+ * Sample multiple lights into a reservoir.
+ * @tparam numSampledLights Number of lights to sample.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG      Random number generator used to sample lights.
+ * @param position      Current position on surface.
+ * @param normal        Shading normal vector at current position.
+ * @param viewDirection View direction vector at current position.
+ * @param solidAngle    Solid angle around view direction of visible ray cone.
+ * @param material      Material for current surface position.
+ * @return Reservoir containing combined samples.
+ */
+template<uint numSampledLights, typename RNG>
+Reservoir sampleLightsList(inout RNG randomNG, float3 position, float3 normal, float3 viewDirection, MaterialBRDF material)
+{
+    // Check if we actually have any lights
+    const uint totalLights = getNumberLights();
+    const uint numLights = numSampledLights;
+
+    // Return invalid sample if there are no lights
+    if (numLights == 0)
+    {
+        return MakeReservoir();
+    }
+
+    // Create reservoir updater
+    ReservoirUpdater updater = MakeReservoirUpdater();
+
+    // Loop through until we have the requested number of lights
+    float lightPDF = 1.0f / (float)totalLights;
+
+    for (uint lightsAdded = 0; lightsAdded < numLights; ++lightsAdded)
+    {
+        // Choose a light to sample from
+        const uint lightIndex = randomNG.randInt(totalLights);
+
+        // Add the light sample to the reservoir
+        updateReservoir(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, numLights);
+    }
+
+    // Get finalised reservoir for return
+    return updater.reservoir;
+}
+
+/**
+ * Sample multiple lights into a reservoir using cone angle.
+ * @tparam numSampledLights Number of lights to sample.
+ * @tparam RNG The type of random number sampler to be used.
+ * @param randomNG      Random number generator used to sample lights.
+ * @param position      Current position on surface.
+ * @param normal        Shading normal vector at current position.
+ * @param viewDirection View direction vector at current position.
+ * @param solidAngle    Solid angle around view direction of visible ray cone.
+ * @param material      Material for current surface position.
+ * @return Reservoir containing combined samples.
+ */
+template<uint numSampledLights, typename RNG>
+Reservoir sampleLightsListCone(inout RNG randomNG, float3 position, float3 normal, float3 viewDirection, float solidAngle, MaterialBRDF material)
+{
+    // Check if we actually have any lights
+    const uint totalLights = getNumberLights();
+    const uint numLights = numSampledLights;
+
+    // Return invalid sample if there are no lights
+    if (numLights == 0)
+    {
+        return MakeReservoir();
+    }
+
+    // Create reservoir updater
+    ReservoirUpdater updater = MakeReservoirUpdater();
+
+    // Loop through until we have the requested number of lights
+    float lightPDF = 1.0f / (float)totalLights;
+
+    for (uint lightsAdded = 0; lightsAdded < numLights; ++lightsAdded)
+    {
+        // Choose a light to sample from
+        const uint lightIndex = randomNG.randInt(totalLights);
+
+        // Add the light sample to the reservoir
+        updateReservoirCone(updater, randomNG, lightIndex, lightPDF, material, position, normal, viewDirection, solidAngle, numLights);
+    }
+
+    // Get finalised reservoir for return
+    return updater.reservoir;
+}
+
+/**
+ * Calculate the PDF of sampling a given light using one of the reservoir list sampling functions.
+ * @tparam numSampledLights Number of lights sampled.
+ * @param randomNG Random number generator used to sample lights.
+ * @param lightID  The index of the given light.
+ * @param position The position on the surface currently being shaded.
+ * @param normal   Shading normal vector at current position.
+ * @return The calculated PDF with respect to the light.
+ */
+template<uint numSampledLights, typename RNG>
+float sampleLightsListPDF(inout RNG randomNG, uint lightID, float3 position, float3 normal)
+{
+    return sampleLightsPDF(randomNG, lightID, position, normal);
+}
+#endif
 
 #endif // LIGHT_SAMPLER_UNIFORM_HLSL

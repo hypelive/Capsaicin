@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -54,7 +54,7 @@ struct Light
 #ifndef __cplusplus
         uint index = asuint(v3.w);
 #else
-        uint index = *reinterpret_cast<uint *>(&v3.w);
+        const uint index = *reinterpret_cast<uint *>(&v3.w);
 #endif
         if (index < (uint)kLight_Point)
         {
@@ -87,27 +87,29 @@ struct Light
     //};
     // struct EnvironmentLight
     //{
-    //    uint lods; /**< The number of mip map levels in each face of the texture */
+    //    uint mips; /**< The number of mip map levels in each face of the texture */
+    //    uint width; /**< The environment map texture width/height */
     //};
 };
 
 #ifdef __cplusplus
 /**
- * Make a light type from a area light.
+ * Make a light type from an area light.
  * @param radiance Colour and value of light.
  * @param vertex1  1st vertex position (vertices are expected counter-clockwise in right-handed system).
  * @param vertex2  2nd vertex position.
  * @param vertex3  3rd vertex position.
  * @return A light with the correctly set internal values.
  */
-inline Light MakeAreaLight(float3 radiance, float3 vertex1, float3 vertex2, float3 vertex3)
+inline Light MakeAreaLight(
+    float3 const radiance, float3 const vertex1, float3 const vertex2, float3 const vertex3)
 {
     // Create the new light
-    Light light;
+    Light light    = {};
     light.radiance = float4(radiance, glm::uintBitsToFloat(UINT_MAX));
-    light.v1       = float4(vertex1, 0.0f);
-    light.v2       = float4(vertex2, 0.0f);
-    light.v3       = float4(vertex3, 0.0f);
+    light.v1       = float4(vertex1, 0.0F);
+    light.v2       = float4(vertex2, 0.0F);
+    light.v3       = float4(vertex3, 0.0F);
     return light;
 }
 
@@ -123,11 +125,11 @@ inline Light MakeAreaLight(float3 radiance, float3 vertex1, float3 vertex2, floa
  * @param uv3      3rd vertex uv texture parameter.
  * @return A light with the correctly set internal values.
  */
-inline Light MakeAreaLight(float3 radiance, float3 vertex1, float3 vertex2, float3 vertex3, uint texture,
-    float2 uv1, float2 uv2, float2 uv3)
+inline Light MakeAreaLight(float3 const radiance, float3 const vertex1, float3 const vertex2,
+    float3 const vertex3, uint const texture, float2 const uv1, float2 const uv2, float2 const uv3)
 {
     // Create the new light
-    Light light;
+    Light light    = {};
     light.radiance = float4(radiance, glm::uintBitsToFloat(texture));
     light.v1       = float4(vertex1, glm::uintBitsToFloat(packHalf2x16(uv1)));
     light.v2       = float4(vertex2, glm::uintBitsToFloat(packHalf2x16(uv2)));
@@ -142,40 +144,39 @@ inline Light MakeAreaLight(float3 radiance, float3 vertex1, float3 vertex2, floa
  * @param range     Maximum distance from the light where lighting has an effect.
  * @return A light with the correctly set internal values.
  */
-inline Light MakePointLight(float3 intensity, float3 position, float range)
+inline Light MakePointLight(float3 const intensity, float3 const position, float const range)
 {
-    Light light;
+    Light light    = {};
     light.radiance = float4(intensity, glm::uintBitsToFloat(UINT_MAX));
     light.v1       = float4(position, range);
-    light.v3       = float4(float3(0.0f), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Point)));
+    light.v3       = float4(float3(0.0F), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Point)));
     return light;
 }
 
 /**
  * Make a light type from a spot light.
- * @param intensity       Colour and intensity of light.
- * @param position        Position of the light.
- * @param range           Maximum distance from the light where lighting has an effect.
- * @param direction       The direction to the light along cones view axis.
- * @param outterConeAngle The maximum angle from the cones view axis to the outside of the cone.
- * @param innerConeAngle  The angle from the cones view axis to the inside of the cones penumbra region.
+ * @param intensity      Colour and intensity of light.
+ * @param position       Position of the light.
+ * @param range          Maximum distance from the light where lighting has an effect.
+ * @param direction      The direction to the light along cones view axis.
+ * @param outerConeAngle The maximum angle from the cones view axis to the outside of the cone.
+ * @param innerConeAngle The angle from the cones view axis to the inside of the cones penumbra region.
  * @return A light with the correctly set internal values.
  */
-inline Light MakeSpotLight(float3 intensity, float3 position, float range, float3 direction,
-    float outterConeAngle, float innerConeAngle)
+inline Light MakeSpotLight(float3 const intensity, float3 const position, float const range,
+    float3 const direction, float const outerConeAngle, float const innerConeAngle)
 {
-    float cosOutter         = -cosf(outterConeAngle);
-    float lightAngleScale   = 1.0f / glm::max(0.001f, cosf(innerConeAngle) + cosOutter);
-    float sinAngle          = sinf(outterConeAngle);
-    float tanAngle          = tanf(outterConeAngle);
-    float lightAngleOffset  = cosOutter * lightAngleScale;
-    float tanAngleSqPlusOne = 1.0f + (tanAngle * tanAngle);
-    Light light;
-    light.radiance = float4(intensity, glm::uintBitsToFloat(UINT_MAX));
-    light.v1       = float4(position, range);
-    light.v2       = float4(normalize(direction), sinAngle);
-    light.v3       = float4(lightAngleScale, lightAngleOffset, tanAngleSqPlusOne,
-              glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Spot)));
+    float const cosOuter         = -cosf(outerConeAngle);
+    float const lightAngleScale  = 1.0F / glm::max(0.001F, cosf(innerConeAngle) + cosOuter);
+    float const lightAngleOffset = cosOuter * lightAngleScale;
+    float const sinAngle         = sinf(outerConeAngle);
+    float const tanAngle         = tanf(outerConeAngle);
+    Light       light            = {};
+    light.radiance               = float4(intensity, glm::uintBitsToFloat(UINT_MAX));
+    light.v1                     = float4(position, range);
+    light.v2                     = float4(normalize(direction), sinAngle);
+    light.v3                     = float4(lightAngleScale, lightAngleOffset, tanAngle,
+                            glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Spot)));
     return light;
 }
 
@@ -186,27 +187,27 @@ inline Light MakeSpotLight(float3 intensity, float3 position, float range, float
  * @param range     Maximum distance from the light where lighting has an effect.
  * @return A light with the correctly set internal values.
  */
-inline Light MakeDirectionalLight(float3 radiance, float3 direction, float range)
+inline Light MakeDirectionalLight(float3 const radiance, float3 const direction, float const range)
 {
-    Light light;
+    Light light    = {};
     light.radiance = float4(radiance, glm::uintBitsToFloat(UINT_MAX));
-    light.v2       = float4(direction, range);
-    light.v3       = float4(float3(0.0f), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Direction)));
+    light.v2       = float4(normalize(direction), range);
+    light.v3       = float4(float3(0.0F), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Direction)));
     return light;
 }
 
 /**
  * Make a light type from a environment light.
- * @param width  The width of each face in the environment cube map.
- * @param height The height of each face in the environment cube map.
+ * @param mips   The number of mip levels contained in the texture (must be atleast 1).
+ * @param width  The width of each face in the environment cube map (height must equal width).
  * @return A light with the correctly set internal values.
  */
-inline Light MakeEnvironmentLight(uint width, uint height)
+inline Light MakeEnvironmentLight(uint const mips, uint const width)
 {
-    Light light;
-    uint  lod      = glm::findMSB(glm::max(width, height));
-    light.radiance = float4(float3(glm::uintBitsToFloat(lod), 0.0f, 0.0f), glm::uintBitsToFloat(UINT_MAX));
-    light.v3       = float4(float3(0.0f), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Environment)));
+    Light light    = {};
+    light.radiance = float4(float3(glm::uintBitsToFloat(mips), glm::uintBitsToFloat(width), 0.0F),
+        glm::uintBitsToFloat(UINT_MAX));
+    light.v3       = float4(float3(0.0F), glm::uintBitsToFloat(static_cast<glm::uint>(kLight_Environment)));
     return light;
 }
 #endif
@@ -221,7 +222,7 @@ inline bool isDeltaLight(Light light)
 #if defined(DISABLE_DELTA_LIGHTS)
     return false;
 #elif !defined(DISABLE_AREA_LIGHTS) && !defined(DISABLE_ENVIRONMENT_LIGHTS)
-    LightType type = light.get_light_type();
+    const LightType type = light.get_light_type();
     return type != kLight_Area && type != kLight_Environment;
 #elif !defined(DISABLE_AREA_LIGHTS)
     return light.get_light_type() != kLight_Area;
@@ -241,7 +242,7 @@ inline bool isDeltaLight(Light light)
 inline bool hasLightPosition(Light light)
 {
 #if !defined(DISABLE_DELTA_LIGHTS) && !defined(DISABLE_ENVIRONMENT_LIGHTS)
-    LightType type = light.get_light_type();
+    const LightType type = light.get_light_type();
     return type != kLight_Direction && type != kLight_Environment;
 #elif defined(DISABLE_DELTA_LIGHTS) && !defined(DISABLE_ENVIRONMENT_LIGHTS) && !defined(DISABLE_AREA_LIGHTS)
     return light.get_light_type() != kLight_Environment;

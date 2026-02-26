@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -381,7 +381,8 @@ CAPSAICIN_EXPORT void SetRenderDimensionsScale(float scale) noexcept;
  * @return The list of available options.
  */
 CAPSAICIN_EXPORT
-std::map<std::string_view, std::variant<bool, uint32_t, int32_t, float, std::string>> &GetOptions() noexcept;
+std::map<std::string_view, std::variant<bool, uint32_t, int32_t, uint8_t, float, std::string>> &
+GetOptions() noexcept;
 
 /**
  * Checks if an options exists with the specified type.
@@ -468,5 +469,25 @@ CAPSAICIN_EXPORT void DumpDebugView(
  * @param jittered    Jittered camera or not.
  */
 CAPSAICIN_EXPORT void DumpCamera(std::filesystem::path const &file_path, bool jittered) noexcept;
+
+struct TimeStamp
+{
+    std::string_view name; /**< The name of the timestamp */
+    float            time; /**< The time in seconds */
+};
+
+struct NodeTimestamps
+{
+    std::string_view       name;     /**< The name of current timestamp node */
+    std::vector<TimeStamp> children; /**< The list of timestamps for all child timestamps (The first entry is
+                                          the timestamp for the whole node) */
+};
+
+/**
+ * Gets the profiling information for each timed section from the current frame.
+ * Should be called after gfxFrame().
+ * @returns Timestamps for each sub-section (see NodeTimestamps for details).
+ */
+CAPSAICIN_EXPORT std::vector<NodeTimestamps> GetProfiling() noexcept;
 
 } // namespace Capsaicin

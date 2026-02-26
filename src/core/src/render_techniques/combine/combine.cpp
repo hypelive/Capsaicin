@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -38,11 +38,27 @@ Combine::~Combine()
 SharedTextureList Combine::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::Write});
+    textures.push_back({.name = "Color", .access = SharedTexture::Access::Write});
 
-    textures.push_back({.name = "DirectLighting", .flags = SharedTexture::Flags::Optional});
-    textures.push_back({.name = "GlobalIllumination", .flags = SharedTexture::Flags::Optional});
-    textures.push_back({.name = "Emission", .flags = SharedTexture::Flags::Optional});
+    textures.push_back({.name = "DirectLighting",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "!DirectLightingDiffuse && !DirectLightingSpecular"});
+    textures.push_back({.name = "DirectLightingDiffuse",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "DirectLightingSpecular && !DirectLighting"});
+    textures.push_back({.name = "DirectLightingSpecular",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "DirectLightingDiffuse && !DirectLighting"});
+    textures.push_back({.name = "GlobalIllumination",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "!GlobalIlluminationDiffuse && !GlobalIlluminationSpecular"});
+    textures.push_back({.name = "GlobalIlluminationDiffuse",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "GlobalIlluminationSpecular && !GlobalIllumination"});
+    textures.push_back({.name = "GlobalIlluminationSpecular",
+        .flags                = SharedTexture::Flags::Optional,
+        .require              = "GlobalIlluminationDiffuse && !GlobalIllumination"});
+    textures.push_back({.name = "Emission", .flags = SharedTexture::Flags::OptionalDiscard});
     textures.push_back({
         .name   = "PrevCombinedIllumination",
         .flags  = SharedTexture::Flags::Optional,
@@ -56,11 +72,21 @@ bool Combine::init(CapsaicinInternal const &capsaicin) noexcept
     std::vector<char const *> defines;
     if (capsaicin.hasSharedTexture("DirectLighting"))
     {
-        defines.push_back("HAS_DIRECT_LIGHTING_BUFFER");
+        defines.push_back("HAS_DI_BUFFER");
+    }
+    if (capsaicin.hasSharedTexture("DirectLightingDiffuse"))
+    {
+        defines.push_back("HAS_DI_BUFFER");
+        defines.push_back("HAS_SPLIT_DI_OUTPUT");
     }
     if (capsaicin.hasSharedTexture("GlobalIllumination"))
     {
-        defines.push_back("HAS_GLOBAL_ILLUMINATION_BUFFER");
+        defines.push_back("HAS_GI_BUFFER");
+    }
+    if (capsaicin.hasSharedTexture("GlobalIlluminationDiffuse"))
+    {
+        defines.push_back("HAS_GI_BUFFER");
+        defines.push_back("HAS_SPLIT_GI_OUTPUT");
     }
     if (capsaicin.hasSharedTexture("Emission"))
     {
@@ -79,12 +105,14 @@ bool Combine::init(CapsaicinInternal const &capsaicin) noexcept
 
 void Combine::render(CapsaicinInternal &capsaicin) noexcept
 {
-    bool const direct   = capsaicin.hasSharedTexture("DirectLighting");
-    bool const global   = capsaicin.hasSharedTexture("GlobalIllumination");
-    bool const emissive = capsaicin.hasSharedTexture("Emission");
-    bool const backup   = capsaicin.hasSharedTexture("PrevCombinedIllumination");
+    bool const direct        = capsaicin.hasSharedTexture("DirectLighting");
+    bool const directDiffuse = capsaicin.hasSharedTexture("DirectLightingDiffuse");
+    bool const global        = capsaicin.hasSharedTexture("GlobalIllumination");
+    bool const globalDiffuse = capsaicin.hasSharedTexture("GlobalIlluminationDiffuse");
+    bool const emissive      = capsaicin.hasSharedTexture("Emission");
+    bool const backup        = capsaicin.hasSharedTexture("PrevCombinedIllumination");
 
-    if (!direct && !global && !emissive && !backup)
+    if (!(direct || directDiffuse) && !(global || globalDiffuse) && !emissive && !backup)
     {
         // Nothing to do
         return;
@@ -96,10 +124,24 @@ void Combine::render(CapsaicinInternal &capsaicin) noexcept
         gfxProgramSetParameter(
             gfx_, combineProgram, "g_DirectLightingBuffer", capsaicin.getSharedTexture("DirectLighting"));
     }
+    else if (directDiffuse)
+    {
+        gfxProgramSetParameter(gfx_, combineProgram, "g_DirectLightingDiffuseBuffer",
+            capsaicin.getSharedTexture("DirectLightingDiffuse"));
+        gfxProgramSetParameter(gfx_, combineProgram, "g_DirectLightingSpecularBuffer",
+            capsaicin.getSharedTexture("DirectLightingSpecular"));
+    }
     if (global)
     {
         gfxProgramSetParameter(gfx_, combineProgram, "g_GlobalIlluminationBuffer",
             capsaicin.getSharedTexture("GlobalIllumination"));
+    }
+    else if (globalDiffuse)
+    {
+        gfxProgramSetParameter(gfx_, combineProgram, "g_GlobalIlluminationDiffuseBuffer",
+            capsaicin.getSharedTexture("GlobalIlluminationDiffuse"));
+        gfxProgramSetParameter(gfx_, combineProgram, "g_GlobalIlluminationSpecularBuffer",
+            capsaicin.getSharedTexture("GlobalIlluminationSpecular"));
     }
     if (emissive)
     {

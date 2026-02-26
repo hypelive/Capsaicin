@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -27,6 +27,8 @@ THE SOFTWARE.
 
 #include <memory>
 
+using namespace std;
+
 namespace Capsaicin
 {
 LightSamplerSwitcher::LightSamplerSwitcher() noexcept
@@ -46,7 +48,7 @@ RenderOptionList LightSamplerSwitcher::getRenderOptions() noexcept
     {
         for (auto &j : LightSamplerFactory::make(i)->getRenderOptions())
         {
-            if (std::ranges::find(std::as_const(newOptions), j) == newOptions.cend())
+            if (ranges::find(as_const(newOptions), j) == newOptions.cend())
             {
                 // Add the new component to requested list
                 newOptions.emplace(std::move(j));
@@ -72,7 +74,7 @@ ComponentList LightSamplerSwitcher::getComponents() const noexcept
     {
         for (auto &j : LightSamplerFactory::make(i)->getComponents())
         {
-            if (std::ranges::find(std::as_const(components), j) == components.cend())
+            if (ranges::find(as_const(components), j) == components.cend())
             {
                 // Add the new component to requested list
                 components.emplace_back(j);
@@ -90,7 +92,7 @@ SharedBufferList LightSamplerSwitcher::getSharedBuffers() const noexcept
     {
         for (auto &j : LightSamplerFactory::make(i)->getSharedBuffers())
         {
-            if (std::ranges::find(std::as_const(buffers), j) == buffers.cend())
+            if (ranges::find(as_const(buffers), j) == buffers.cend())
             {
                 // Add the new component to requested list
                 buffers.emplace_back(j);
@@ -108,7 +110,7 @@ SharedTextureList LightSamplerSwitcher::getSharedTextures() const noexcept
     {
         for (auto &j : LightSamplerFactory::make(i)->getSharedTextures())
         {
-            if (std::ranges::find(std::as_const(textures), j) == textures.cend())
+            if (ranges::find(as_const(textures), j) == textures.cend())
             {
                 // Add the new component to requested list
                 textures.emplace_back(j);
@@ -126,7 +128,7 @@ DebugViewList LightSamplerSwitcher::getDebugViews() const noexcept
     {
         for (auto &j : LightSamplerFactory::make(i)->getDebugViews())
         {
-            if (std::ranges::find(std::as_const(views), j) == views.cend())
+            if (ranges::find(as_const(views), j) == views.cend())
             {
                 // Add the new component to requested list
                 views.emplace_back(j);
@@ -141,7 +143,7 @@ bool LightSamplerSwitcher::init(CapsaicinInternal const &capsaicin) noexcept
     options = convertOptions(capsaicin.getOptions());
     // Initialise the requested light sampler
     auto newSampler = LightSamplerFactory::make(LightSamplerFactory::getNames()[options.light_sampler_type]);
-    std::swap(currentSampler, newSampler);
+    swap(currentSampler, newSampler);
     currentSampler->setGfxContext(gfx_);
     currentSampler->init(capsaicin);
     return true;
@@ -158,7 +160,7 @@ void LightSamplerSwitcher::run(CapsaicinInternal &capsaicin) noexcept
         // Initialise the requested light sampler
         auto newSampler =
             LightSamplerFactory::make(LightSamplerFactory::getNames()[optionsNew.light_sampler_type]);
-        std::swap(currentSampler, newSampler);
+        swap(currentSampler, newSampler);
         currentSampler->setGfxContext(gfx_);
         currentSampler->init(capsaicin);
     }
@@ -174,16 +176,16 @@ void LightSamplerSwitcher::terminate() noexcept
 void LightSamplerSwitcher::renderGUI(CapsaicinInternal &capsaicin) const noexcept
 {
     // Select which renderer to use
-    std::string samplerString;
-    auto const  samplerList = LightSamplerFactory::getNames();
+    vector<char const *> samplerString;
+    auto const           samplerList = LightSamplerFactory::getNames();
+    samplerString.reserve(samplerList.size());
     for (auto const &i : samplerList)
     {
-        samplerString += i;
-        samplerString += '\0';
+        samplerString.emplace_back(i.data());
     }
     ImGui::Combo("Light Sampler",
         reinterpret_cast<int32_t *>(&capsaicin.getOption<uint32_t>("light_sampler_type")),
-        samplerString.c_str());
+        samplerString.data(), static_cast<int32_t>(samplerString.size()));
     currentSampler->renderGUI(capsaicin);
 }
 
@@ -192,11 +194,10 @@ bool LightSamplerSwitcher::needsRecompile(CapsaicinInternal const &capsaicin) co
     return samplerChanged || currentSampler->needsRecompile(capsaicin);
 }
 
-std::vector<std::string> LightSamplerSwitcher::getShaderDefines(
-    CapsaicinInternal const &capsaicin) const noexcept
+vector<string> LightSamplerSwitcher::getShaderDefines(CapsaicinInternal const &capsaicin) const noexcept
 {
-    auto        ret           = currentSampler->getShaderDefines(capsaicin);
-    std::string samplerHeader = "LIGHT_SAMPLER_HEADER=";
+    auto   ret           = currentSampler->getShaderDefines(capsaicin);
+    string samplerHeader = "LIGHT_SAMPLER_HEADER=";
     samplerHeader += currentSampler->getHeaderFile();
     ret.emplace_back(samplerHeader);
     return ret;
@@ -218,9 +219,9 @@ uint32_t LightSamplerSwitcher::getTimestampQueryCount() const noexcept
     return Timeable::getTimestampQueryCount() + currentSampler->getTimestampQueryCount();
 }
 
-std::vector<TimestampQuery> const &LightSamplerSwitcher::getTimestampQueries() const noexcept
+vector<TimestampQuery> const &LightSamplerSwitcher::getTimestampQueries() const noexcept
 {
-    static std::vector<TimestampQuery> tempQueries;
+    static vector<TimestampQuery> tempQueries;
     // Need to add child queries to the current list of queries
     tempQueries              = queries;
     auto const &childQueries = currentSampler->getTimestampQueries();

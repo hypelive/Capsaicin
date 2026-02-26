@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,20 +21,27 @@ THE SOFTWARE.
 ********************************************************************/
 #pragma once
 
-#include "render_technique.h"
+#include "components/component.h"
 
 namespace Capsaicin
 {
-class TAA final : public RenderTechnique
+class RandomNumberGenerator final
+    : public Component
+    , ComponentFactory::Registrar<RandomNumberGenerator>
 {
 public:
-    TAA();
-    ~TAA() override;
+    static constexpr std::string_view Name = "RandomNumberGenerator";
 
-    TAA(const TAA &other)                = delete;
-    TAA(TAA &&other) noexcept            = delete;
-    TAA &operator=(const TAA &other)     = delete;
-    TAA &operator=(TAA &&other) noexcept = delete;
+    /** Constructor. */
+    RandomNumberGenerator() noexcept;
+
+    /** Destructor. */
+    ~RandomNumberGenerator() noexcept override;
+
+    RandomNumberGenerator(RandomNumberGenerator const &other)                = delete;
+    RandomNumberGenerator(RandomNumberGenerator &&other) noexcept            = delete;
+    RandomNumberGenerator &operator=(RandomNumberGenerator const &other)     = delete;
+    RandomNumberGenerator &operator=(RandomNumberGenerator &&other) noexcept = delete;
 
     /*
      * Gets configuration options for current technique.
@@ -44,7 +51,9 @@ public:
 
     struct RenderOptions
     {
-        bool taa_enable = true;
+        bool     random_deterministic = true; /**< Use deterministic seeding of random numbers */
+        uint32_t random_seed =
+            5489; /**< Seed for random number generation (only used in deterministic mode) */
     };
 
     /**
@@ -53,12 +62,6 @@ public:
      * @return The options converted.
      */
     static RenderOptions convertOptions(RenderOptionList const &options) noexcept;
-
-    /**
-     * Gets the required list of shared textures needed for the current render technique.
-     * @return A list of all required shared textures.
-     */
-    [[nodiscard]] SharedTextureList getSharedTextures() const noexcept override;
 
     /**
      * Initialise any internal data or state.
@@ -70,10 +73,10 @@ public:
     bool init(CapsaicinInternal const &capsaicin) noexcept override;
 
     /**
-     * Perform render operations.
-     * @param [in,out] capsaicin The current capsaicin context.
+     * Run internal operations.
+     * @param [in,out] capsaicin Current framework context.
      */
-    void render(CapsaicinInternal &capsaicin) noexcept override;
+    void run(CapsaicinInternal &capsaicin) noexcept override;
 
     /**
      * Destroy any used internal resources and shutdown.
@@ -81,18 +84,14 @@ public:
     void terminate() noexcept override;
 
     /**
-     * Render GUI options.
-     * @param [in,out] capsaicin The current capsaicin context.
+     * Add the required program parameters to a shader based on current settings.
+     * @param capsaicin Current framework context.
+     * @param program   The shader program to bind parameters to.
      */
-    void renderGUI(CapsaicinInternal &capsaicin) const noexcept override;
+    void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
-protected:
+private:
     RenderOptions options;
-
-    GfxTexture color_buffers_[2];
-
-    GfxProgram taa_program_;
-    GfxKernel  resolve_temporal_kernel_;
-    GfxKernel  update_history_kernel_;
+    GfxBuffer     seedBuffer;
 };
 } // namespace Capsaicin

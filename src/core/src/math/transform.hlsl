@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,22 +32,20 @@ THE SOFTWARE.
  */
 float3x3 getNormalTransform(float3x3 transform)
 {
-    // The transform for a normal is transpose(inverse(M))
-    // The inverse is calculated as [1/det(A)]*transpose(C) where C is the cofactor matrix
-    // This simplifies down to [1/det(A)]*C
-    float3x3 result;
-    result._m00 = determinant(float2x2(transform._m11_m12, transform._m21_m22));
-    result._m01 = -determinant(float2x2(transform._m10_m12, transform._m20_m22));
-    result._m02 = determinant(float2x2(transform._m10_m11, transform._m20_m21));
-    result._m10 = -determinant(float2x2(transform._m01_m02, transform._m21_m22));
-    result._m11 = determinant(float2x2(transform._m00_m02, transform._m20_m22));
-    result._m12 = -determinant(float2x2(transform._m00_m01, transform._m20_m21));
-    result._m20 = determinant(float2x2(transform._m01_m02, transform._m11_m12));
-    result._m21 = -determinant(float2x2(transform._m00_m02, transform._m10_m12));
-    result._m22 = determinant(float2x2(transform._m00_m01, transform._m10_m11));
-    const float3 det3 = transform._m00_m01_m02 * result._m00_m01_m02;
-    const float det = 1.0f / hadd(det3);
-    return (result * det);
+    // The transform for a normal is [1/det(M)]transpose(adj(M))
+    // This simplifies down to [1/det(M)]*C where C is the cofactor matrix of M
+    float3x3 result = float3x3(
+        cross(transform[1].xyz, transform[2].xyz),
+        cross(transform[2].xyz, transform[0].xyz),
+        cross(transform[0].xyz, transform[1].xyz)
+    );
+    // Use values already calculated in 'result' to get determinant
+    const float3 det3 = transform[0] * result[0];
+    const float det = hadd(det3);
+    // det(M) is used to correct for inverse scale (mirroring) so it's only needed
+    //  to flip normal directions to the correct orientation and so just using the
+    //  determinants sign will suffice as this saves a division
+    return result * sign(det);
 }
 
 /**
@@ -76,7 +74,7 @@ float3 transformVector(const float3 values, const float3x4 transform)
 
 /**
  * Transform a 3D point by an affine matrix.
- * @param direction The direction vector.
+ * @param values    The position.
  * @param transform The transform matrix.
  * @return The new transform matrix.
  */
@@ -89,7 +87,7 @@ float3 transformPoint(const float3 values, const float3x4 transform)
  * Transform a 3D point.
  * @note This version of transforming a point assumes a non-affine matrix and will handle
  *  normalisation of the result by the 'w' component.
- * @param direction The direction vector.
+ * @param values    The position.
  * @param transform The transform matrix.
  * @return The new transform matrix.
  */

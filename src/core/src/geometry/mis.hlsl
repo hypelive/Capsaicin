@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,13 @@ THE SOFTWARE.
 
 #ifndef MIS_HLSL
 #define MIS_HLSL
+
+#define MIS_BALANCE 0  /**< Use balance heuristic */
+#define MIS_POWER   1  /**< Use power heuristic */
+
+#ifndef MIS_HEURISTIC
+#   define MIS_HEURISTIC MIS_BALANCE
+#endif
 
 /**
  * Balanced heuristic used in MIS weight calculation.
@@ -61,6 +68,7 @@ float powerHeuristic(float fPDF, float gPDF)
  * Power heuristic used in MIS weight calculation over 3 input functions.
  * @param fPDF The PDF of the sampled value.
  * @param gPDF The PDF of the MIS weighting value.
+ * @param hPDF The PDF of the second MIS weighting value.
  * @return The calculated weight.
  */
 float powerHeuristic(float fPDF, float gPDF, float hPDF)
@@ -76,20 +84,27 @@ float powerHeuristic(float fPDF, float gPDF, float hPDF)
  */
 float heuristicMIS(float fPDF, float gPDF)
 {
+#if MIS_HEURISTIC == MIS_BALANCE
     return balanceHeuristic(fPDF, gPDF);
-    //return powerHeuristic(fPDF, gPDF);
+#else
+    return powerHeuristic(fPDF, gPDF);
+#endif
 }
 
 /**
  * Heuristic used in MIS weight calculation over 3 input functions.
  * @param fPDF The PDF of the sampled value.
  * @param gPDF The PDF of the MIS weighting value.
+ * @param hPDF The PDF of the second MIS weighting value.
  * @return The calculated weight.
  */
 float heuristicMIS(float fPDF, float gPDF, float hPDF)
 {
+#if MIS_HEURISTIC == MIS_BALANCE
     return balanceHeuristic(fPDF, gPDF, hPDF);
-    //return powerHeuristic(fPDF, gPDF, hPDF);
+#else
+    return powerHeuristic(fPDF, gPDF, hPDF);
+#endif
 }
 
 #endif // MIS_HLSL

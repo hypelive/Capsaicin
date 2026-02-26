@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -327,12 +327,38 @@ float2 mapToGaussian(float2 samples)
     const float deviation = 0.5f / 3.0f; //~99.7% of samples within +-0.5 of mean
     return mean.xx + points * deviation.xx;
 }
-
+// see "A Low-Distortion Map Between Triangle and Square" by Eric Heitz
 float2 MapToTriangleLowDistortion(in float2 s)
 {
-    return s.y > s.x ?
-        float2(s.x / 2.0f, s.y - s.x / 2.0f) :
-        float2(s.x - s.y / 2.0f, s.y / 2.0f);
+    float2 barycentrics = s;
+    if (barycentrics.y > barycentrics.x)
+    {
+        barycentrics.x *= 0.5f;
+        barycentrics.y -= barycentrics.x;
+    }
+    else
+    {
+        barycentrics.y *= 0.5f;
+        barycentrics.x -= barycentrics.y;
+    }
+    return barycentrics;
+}
+
+// Inverse of MapToTriangleLowDistortion
+float2 MapFromTriangleLowDistortion(float2 barycentrics)
+{
+    float2 s = barycentrics;
+    if (s.y > s.x)
+    {
+        s.y += s.x;
+        s.x *= 2.0f;
+    }
+    else
+    {
+        s.x += s.y;
+        s.y *= 2.0f;
+    }
+    return s;
 }
 
 float3x3 CreateTBN(in float3 n)

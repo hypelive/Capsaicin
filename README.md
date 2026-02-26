@@ -15,9 +15,9 @@ Features:
 
 ![Capsaicin](docs/images/scene_viewer.png)
 
-## GI-1.1
+## GI-1.2
 
-We used Capsaicin to implement our GI-1.1 technique for estimating diffuse and specular indirect illumination in real-time.
+We used Capsaicin to implement our GI-1.2 technique for estimating diffuse and specular indirect illumination in real-time.
 
 The technique uses two levels of radiance caching to allow for reduced sampling rate in order to improve performance while making the most of every ray through better sampling.
 
@@ -25,7 +25,7 @@ Please refer to our [GI-1.0 technical report](https://gpuopen.com/download/publi
 
 #### Note on light support
 
-GI-1.1 is primarily an indirect lighting solution and as such is expected to be combined with an existing direct lighting technique for integration into a rendering pipeline.
+GI-1.2 is primarily an indirect lighting solution and as such is expected to be combined with an existing direct lighting technique for integration into a rendering pipeline.
 
 All common light types are supported when evaluating the indirect lighting component (e.g., point lights, spot lights, etc.) using our grid-based light sampler and (optional) reservoir-based resampling.
 
@@ -33,21 +33,20 @@ Furthermore the technique can estimate direct lighting through its probe system 
 
 ## Prerequisites
 
-- Direct3D12 capable hardware and OS (Windows 10 20H2 or newer)
-- [Windows 10 SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk/) or newer
-- CMake 3.24 or newer (can use Visual Studio, VSCode or any other CMake supported IDE)
-- DirectX Raytracing capable GPU and compatible drivers
+- Direct3D12 Ultimate capable hardware and OS (Windows 10 20H2 or newer)
+- [Windows 10 SDK 2004](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk/) or newer
+- CMake 3.30 or newer (can use Visual Studio, VSCode or any other CMake supported IDE)
 
 ## Building
 
 Capsaicin uses submodules to include any essential dependencies.
 
 The following submodules are required:
-- gfx: Contains gfx D3D12 abstraction library (located in "third_party/" subfolder
+- gfx: Contains gfx D3D12 abstraction library (located in "third_party/gfx" subfolder
 
 When acquiring the code make sure to clone the repo with submodules included:
 
-`git clone --recurse-submodules https://github.com/Radeon-Pro/Capsaicin`
+`git clone --recurse-submodules https://github.com/GPUOpen-LibrariesAndSDKs/Capsaicin.git`
 
 If you have already cloned this repo without submodules, then use:
 
@@ -74,7 +73,7 @@ If Capsaicin is used in any published work, ensure to cite it using:
    title =  {The {AMD Capsaicin Framework}},
    year =   {2023},
    month =  {8},
-   url =    {https://github.com/Radeon-Pro/Capsaicin_Open},
+   url =    {https://github.com/GPUOpen-LibrariesAndSDKs/Capsaicin},
 }
 ```
 

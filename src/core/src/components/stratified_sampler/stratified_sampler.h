@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -51,7 +51,9 @@ public:
 
     struct RenderOptions
     {
-        bool stratified_sampler_deterministic = true; /**< Use deterministic seeding of random numbers */
+        bool     stratified_sampler_deterministic = true; /**< Use deterministic seeding of random numbers */
+        uint32_t stratified_sampler_seed =
+            5489; /**< Seed for random number generation (only used in deterministic mode) */
     };
 
     /**
@@ -92,5 +94,7 @@ private:
     RenderOptions options;
     GfxBuffer     seedBuffer;
     GfxBuffer     sobolBuffer;
+
+    friend class RandomNumberGenerator;
 };
 } // namespace Capsaicin

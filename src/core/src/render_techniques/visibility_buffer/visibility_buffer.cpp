@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ THE SOFTWARE.
 
 #include "visibility_buffer.h"
 
-#include "../../geometry/path_tracing_shared.h"
+#include "../../ray_tracing/path_tracing_shared.h"
 #include "capsaicin_internal.h"
 #include "components/blue_noise_sampler/blue_noise_sampler.h"
 #include "visibility_buffer_shared.h"
@@ -68,38 +68,54 @@ ComponentList VisibilityBuffer::getComponents() const noexcept
 SharedBufferList VisibilityBuffer::getSharedBuffers() const noexcept
 {
     SharedBufferList buffers;
-    buffers.push_back({"Meshlets", SharedBuffer::Access::Read});
-    buffers.push_back({"MeshletPack", SharedBuffer::Access::Read});
-    buffers.push_back({"MeshletCull", SharedBuffer::Access::Read});
+    buffers.push_back({.name = "Meshlets", .access = SharedBuffer::Access::Read});
+    buffers.push_back({.name = "MeshletPack", .access = SharedBuffer::Access::Read});
+    buffers.push_back({.name = "MeshletCull", .access = SharedBuffer::Access::Read});
     return buffers;
 }
 
 SharedTextureList VisibilityBuffer::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Debug", SharedTexture::Access::Write});
-    textures.push_back({"Visibility", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-        DXGI_FORMAT_R32G32B32A32_FLOAT});
-    textures.push_back({"Depth", SharedTexture::Access::ReadWrite});
+    textures.push_back({.name = "Debug", .access = SharedTexture::Access::Write});
+    textures.push_back({.name = "Visibility",
+        .access               = SharedTexture::Access::Write,
+        .flags                = SharedTexture::Flags::Clear,
+        .format               = DXGI_FORMAT_R32G32B32A32_FLOAT});
+    textures.push_back({.name = "Depth", .access = SharedTexture::Access::ReadWrite});
     textures.push_back({.name = "VisibilityDepth",
         .access               = SharedTexture::Access::Write,
         .flags                = SharedTexture::Flags::None,
         .format               = DXGI_FORMAT_R32_FLOAT,
         .backup_name          = "PrevVisibilityDepth"});
-    textures.push_back({"GeometryNormal", SharedTexture::Access::Write, SharedTexture::Flags::Clear,
-        DXGI_FORMAT_R8G8B8A8_UNORM});
-    textures.push_back(
-        {"Velocity", SharedTexture::Access::Write, SharedTexture::Flags::Clear, DXGI_FORMAT_R16G16_FLOAT});
-    textures.push_back({"ShadingNormal", SharedTexture::Access::Write,
-        (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional), DXGI_FORMAT_R8G8B8A8_UNORM});
-    textures.push_back({"VertexNormal", SharedTexture::Access::Write,
-        (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional), DXGI_FORMAT_R8G8B8A8_UNORM});
-    textures.push_back({"Roughness", SharedTexture::Access::Write,
-        (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional), DXGI_FORMAT_R16_FLOAT});
-    textures.push_back({"Gradients", SharedTexture::Access::Write,
-        (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional), DXGI_FORMAT_R16G16B16A16_FLOAT});
-    textures.push_back({"DisocclusionMask", SharedTexture::Access::Write,
-        (SharedTexture::Flags::None | SharedTexture::Flags::Optional), DXGI_FORMAT_R8_UNORM});
+    textures.push_back({.name = "GeometryNormal",
+        .access               = SharedTexture::Access::Write,
+        .flags                = SharedTexture::Flags::Clear,
+        .format               = DXGI_FORMAT_R10G10B10A2_UNORM});
+    textures.push_back({.name = "Velocity",
+        .access               = SharedTexture::Access::Write,
+        .flags                = SharedTexture::Flags::Clear,
+        .format               = DXGI_FORMAT_R16G16_FLOAT});
+    textures.push_back({.name = "ShadingNormal",
+        .access               = SharedTexture::Access::Write,
+        .flags                = (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional),
+        .format               = DXGI_FORMAT_R10G10B10A2_UNORM});
+    textures.push_back({.name = "VertexNormal",
+        .access               = SharedTexture::Access::Write,
+        .flags                = (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional),
+        .format               = DXGI_FORMAT_R10G10B10A2_UNORM});
+    textures.push_back({.name = "Roughness",
+        .access               = SharedTexture::Access::Write,
+        .flags                = (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional),
+        .format               = DXGI_FORMAT_R16_FLOAT});
+    textures.push_back({.name = "Gradients",
+        .access               = SharedTexture::Access::Write,
+        .flags                = (SharedTexture::Flags::Clear | SharedTexture::Flags::Optional),
+        .format               = DXGI_FORMAT_R16G16B16A16_FLOAT});
+    textures.push_back({.name = "DisocclusionMask",
+        .access               = SharedTexture::Access::Write,
+        .flags                = (SharedTexture::Flags::None | SharedTexture::Flags::Optional),
+        .format               = DXGI_FORMAT_R8_UNORM});
     return textures;
 }
 
@@ -355,11 +371,12 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
         auto        bufferDimensions = capsaicin.getRenderDimensions();
         auto const &cam              = capsaicin.getCamera();
         {
-            DrawConstantsRT const constants {cameraMatrices.view_projection,
-                cameraMatrices.view_projection_prev, bufferDimensions,
-                float2(cameraMatrices.projection[2][0] * static_cast<float>(bufferDimensions.x),
-                    cameraMatrices.projection[2][1] * static_cast<float>(bufferDimensions.y))
-                    * 0.5F};
+            DrawConstantsRT const constants {.viewProjection = cameraMatrices.view_projection,
+                .prevViewProjection                          = cameraMatrices.view_projection_prev,
+                .dimensions                                  = bufferDimensions,
+                .jitter = float2(cameraMatrices.projection[2][0] * static_cast<float>(bufferDimensions.x),
+                              cameraMatrices.projection[2][1] * static_cast<float>(bufferDimensions.y))
+                        * 0.5F};
             gfxDestroyBuffer(gfx_, constants_buffer);
             constants_buffer = gfxCreateBuffer<DrawConstantsRT>(gfx_, 1, &constants);
         }
@@ -368,8 +385,14 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
         gfxCommandClearTexture(gfx_, capsaicin.getSharedTexture("VisibilityDepth"));
 
         gfxProgramSetParameter(gfx_, visibility_buffer_program_, "g_VBConstants", constants_buffer);
-        auto cameraData = caclulateRayCamera(
-            {cam.eye, cam.center, cam.up, cam.aspect, cam.fovY, cam.nearZ, cam.farZ}, bufferDimensions);
+        auto cameraData = caclulateRayCamera({.origin    = cam.eye,
+                                                 .lookAt = cam.center,
+                                                 .up     = cam.up,
+                                                 .aspect = cam.aspect,
+                                                 .fovY   = cam.fovY,
+                                                 .nearZ  = cam.nearZ,
+                                                 .farZ   = cam.farZ},
+            bufferDimensions);
 
         gfxProgramSetParameter(gfx_, visibility_buffer_program_, "g_RayCamera", cameraData);
 
@@ -704,7 +727,9 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
             debug_program = capsaicin.createProgram("render_techniques/visibility_buffer/debug_dxr10");
             // Associate space1 with local root signature for MyHitGroup
             GfxLocalRootSignatureAssociation local_root_signature_associations[] = {
-                {1, kGfxShaderGroupType_Hit, "MyHitGroup"}
+                {.local_root_signature_space = 1,
+                 .shader_group_type       = kGfxShaderGroupType_Hit,
+                 .shader_group_name       = "MyHitGroup"}
             };
             debug_kernel =
                 gfxCreateRaytracingKernel(gfx_, debug_program, local_root_signature_associations, 1);
@@ -727,16 +752,15 @@ void VisibilityBuffer::render(CapsaicinInternal &capsaicin) noexcept
         // Populate shader binding table
         gfxSbtSetShaderGroup(gfx_, debug_sbt, kGfxShaderGroupType_Raygen, 0, "MyRaygenShader");
         gfxSbtSetShaderGroup(gfx_, debug_sbt, kGfxShaderGroupType_Miss, 0, "MyMissShader");
-        for (uint32_t i = 0; i < capsaicin.getRaytracingPrimitiveCount(); i++)
+        for (uint32_t i = 0, count = capsaicin.getRaytracingPrimitiveCount(); i < count; i++)
         {
             gfxSbtSetShaderGroup(gfx_, debug_sbt, kGfxShaderGroupType_Hit,
                 i * capsaicin.getSbtStrideInEntries(kGfxShaderGroupType_Hit),
                 i % 2 == 0 ? "MyHitGroup" : "MyHitGroup2");
             // Populate local root signature parameters
-            glm::vec4 test_data = i % 4 == 0 ? glm::vec4(0, 0, 1, 0) : glm::vec4(0, 1, 0, 0);
             gfxSbtSetConstants(gfx_, debug_sbt, kGfxShaderGroupType_Hit,
-                i * capsaicin.getSbtStrideInEntries(kGfxShaderGroupType_Hit), "g_MyCB", &test_data,
-                sizeof(test_data));
+                i * capsaicin.getSbtStrideInEntries(kGfxShaderGroupType_Hit), "g_Offset", &i,
+                sizeof(i));
         }
         gfxCommandBindKernel(gfx_, debug_kernel);
         auto bufferDimensions = capsaicin.getRenderDimensions();
@@ -896,7 +920,6 @@ bool VisibilityBuffer::initKernel(CapsaicinInternal const &capsaicin) noexcept
         }
         else
         {
-            defines.push_back("USE_INLINE_RT");
             visibility_buffer_kernel_ = gfxCreateComputeKernel(gfx_, visibility_buffer_program_,
                 "VisibilityBufferRT", defines.data(), static_cast<uint32_t>(defines.size()));
         }

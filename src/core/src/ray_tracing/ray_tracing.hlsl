@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,6 +34,32 @@ struct HitInfo
     float2 barycentrics;
     bool frontFace;
 };
+
+struct RayInfo
+{
+    float3 origin;
+    float3 direction;
+    float2 range;
+};
+
+RayInfo GetRayInfoRt()
+{
+    RayInfo ray;
+    ray.origin = WorldRayOrigin();
+    ray.direction = WorldRayDirection();
+    ray.range = float2(RayTMin(), RayTCurrent());
+    return ray;
+}
+
+RayDesc GetRayDesc(const RayInfo ray)
+{
+    RayDesc ret;
+    ret.Origin = ray.origin;
+    ret.Direction = ray.direction;
+    ret.TMin = ray.range.x;
+    ret.TMax = ray.range.y;
+    return ret;
+}
 
 RayDesc GetRayDescRt()
 {

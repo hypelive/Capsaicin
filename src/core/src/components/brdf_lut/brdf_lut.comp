@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -62,10 +62,10 @@ void ComputeBrdfLut(uint2 did : SV_DispatchThreadID)
         float dotNH = clamp(h.z, -1.0f, 1.0f);
         float dotNL = clamp(wi.z, -1.0f, 1.0f);
         float3 F;
-        float3 FGD = evaluateGGX(alpha, alpha * alpha, 0.0f, dotHV, dotNH, dotNL, dotNV, F);
+        float3 FGD = evaluateGGX(alpha * alpha, 0.0f, dotHV, dotNH, dotNL, dotNV, F);
         float3 GD = FGD / F;
 
-        float pdf = sampleGGXPDF(alpha * alpha, dotNH, dotNV, wo);
+        float pdf = sampleGGXPDF(alpha, alpha * alpha, dotNH, dotNV, wo);
 
         lut_value += float2(GD.x, FGD.x) * saturate(dotNL) / pdf; // saturate(dotNL) = abs(dotNL) * Heaviside function for the upper hemisphere.
     }

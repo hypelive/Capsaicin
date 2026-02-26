@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -166,15 +166,16 @@ float ConvertAlphaToPerceptualRoughness(const float alpha)
  */
 float ClampAlphaRoughness(const float alpha)
 {
-    const float ALPHA_MIN = 0.000001;
-    return max(alpha, ALPHA_MIN);
+#ifdef CUSTOM_ROUGHNESS_CLAMP
+    return max(alpha, CUSTOM_ROUGHNESS_CLAMP);
+#else
+    return max(alpha, 0.000001f);
+#endif
 }
 
 /**
  * Calculates the material data directly from an evaluated material.
- * @param albedo      Materials albedo value.
- * @param metallicity Materials metallicity value.
- * @param roughness   Materials roughness value.
+ * @param material The material to evaluate.
  * @return The new material data.
  */
 MaterialBRDF MakeMaterialBRDF(MaterialEvaluated material)
@@ -369,7 +370,7 @@ MaterialBSDF MakeMaterialBSDF(Material material, float2 uv)
  */
 MaterialBSDF MakeMaterialBSDF(Material material, float2 uv, float2 gradX, float2 gradY)
 {
-    MaterialBRDF materialBRDF = MakeMaterialBRDF(material, uv);
+    MaterialBRDF materialBRDF = MakeMaterialBRDF(material, uv, gradX, gradY);
 
     float4 areaEmissivity = emissiveAlphaScaled(material, uv);
     float3 emissivity = areaEmissivity.xyz;

@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -47,41 +47,45 @@ public:
 
     struct RenderOptions
     {
-        bool  gi1_use_dxr10                                 = false;
-        bool  gi1_use_resampling                            = false;
-        bool  gi1_disable_alpha_testing                     = false;
-        bool  gi1_use_direct_lighting                       = true;
-        bool  gi1_disable_albedo_textures                   = false;
-        bool  gi1_disable_specular_materials                = false;
-        float gi1_hash_grid_cache_cell_size                 = 32.0F;
-        float gi1_hash_grid_cache_min_cell_size             = 1e-1F;
-        int   gi1_hash_grid_cache_tile_cell_ratio           = 8;  // 8x8               = 64
-        int   gi1_hash_grid_cache_num_buckets               = 12; // 1 << 12           = 4096
-        int   gi1_hash_grid_cache_num_tiles_per_bucket      = 4; // 1 <<  4           = 16     total : 4194304
-        float gi1_hash_grid_cache_max_sample_count          = 16.F; //
-        int   gi1_hash_grid_cache_debug_mip_level           = 0;
-        bool  gi1_hash_grid_cache_debug_propagate           = false;
-        int   gi1_hash_grid_cache_debug_max_cell_decay      = 0; // Debug cells touched this frame
-        bool  gi1_hash_grid_cache_debug_stats               = false;
-        int   gi1_hash_grid_cache_debug_max_bucket_overflow = 64;
-        float gi1_reservoir_cache_cell_size                 = 16.0F;
+        bool     gi1_use_dxr10                                           = false;
+        bool     gi1_use_resampling                                      = false;
+        bool     gi1_disable_alpha_testing                               = false;
+        bool     gi1_use_direct_lighting                                 = true;
+        bool     gi1_use_temporal_feedback                               = false;
+        bool     gi1_use_multibounce                                     = true;
+        bool     gi1_disable_albedo_textures                             = false;
+        bool     gi1_disable_specular_materials                          = false;
+        float    gi1_hash_grid_cache_cell_size                           = 32.0F;
+        float    gi1_hash_grid_cache_min_cell_size                       = 1e-1F;
+        uint32_t gi1_hash_grid_cache_tile_cell_ratio                     = 8;     // 8x8
+        uint32_t gi1_hash_grid_cache_num_buckets                         = 14;    // 1 << 14
+        uint32_t gi1_hash_grid_cache_num_tiles_per_bucket                = 4;     // 1 <<  4
+        float    gi1_hash_grid_cache_max_sample_count                    = 16.0F; //
+        float    gi1_hash_grid_cache_discard_multibounce_ray_probability = 0.7F;
+        float    gi1_hash_grid_cache_max_multibounce_sample_count        = 16.0F;
+        uint32_t gi1_hash_grid_cache_debug_mip_level                     = 0;
+        bool     gi1_hash_grid_cache_debug_propagate                     = false;
+        uint32_t gi1_hash_grid_cache_debug_max_cell_decay      = 0; // Debug cells touched this frame
+        bool     gi1_hash_grid_cache_debug_stats               = false;
+        uint32_t gi1_hash_grid_cache_debug_max_bucket_overflow = 64;
+        float    gi1_reservoir_cache_cell_size                 = 16.0F;
 
-        bool  gi1_glossy_reflections_halfres                            = true;
-        int   gi1_glossy_reflections_denoiser_mode                      = 1; // Atrous Ratio Estimator
-        bool  gi1_glossy_reflections_cleanup_fireflies                  = true;
-        float gi1_glossy_reflections_low_roughness_threshold            = 0.2F;
-        float gi1_glossy_reflections_high_roughness_threshold           = 0.6F;
-        int   gi1_glossy_reflections_atrous_pass_count                  = 4;
-        int   gi1_glossy_reflections_full_radius                        = 11;
-        int   gi1_glossy_reflections_half_radius                        = 11;
-        int   gi1_glossy_reflections_mark_fireflies_half_radius         = 3;
-        int   gi1_glossy_reflections_mark_fireflies_full_radius         = 2;
-        float gi1_glossy_reflections_mark_fireflies_half_low_threshold  = 0.0F;
-        float gi1_glossy_reflections_mark_fireflies_full_low_threshold  = 0.0F;
-        float gi1_glossy_reflections_mark_fireflies_half_high_threshold = 1.0F;
-        float gi1_glossy_reflections_mark_fireflies_full_high_threshold = 1.0F;
-        int   gi1_glossy_reflections_cleanup_fireflies_half_radius      = 2;
-        int   gi1_glossy_reflections_cleanup_fireflies_full_radius      = 1;
+        bool     gi1_glossy_reflections_halfres                            = true;
+        uint32_t gi1_glossy_reflections_denoiser_mode                      = 1; // Atrous Ratio Estimator
+        bool     gi1_glossy_reflections_cleanup_fireflies                  = true;
+        float    gi1_glossy_reflections_low_roughness_threshold            = 0.2F;
+        float    gi1_glossy_reflections_high_roughness_threshold           = 0.6F;
+        uint32_t gi1_glossy_reflections_atrous_pass_count                  = 4;
+        uint32_t gi1_glossy_reflections_full_radius                        = 11;
+        uint32_t gi1_glossy_reflections_half_radius                        = 11;
+        uint32_t gi1_glossy_reflections_mark_fireflies_half_radius         = 3;
+        uint32_t gi1_glossy_reflections_mark_fireflies_full_radius         = 2;
+        float    gi1_glossy_reflections_mark_fireflies_half_low_threshold  = 0.0F;
+        float    gi1_glossy_reflections_mark_fireflies_full_low_threshold  = 0.0F;
+        float    gi1_glossy_reflections_mark_fireflies_half_high_threshold = 1.0F;
+        float    gi1_glossy_reflections_mark_fireflies_full_high_threshold = 1.0F;
+        uint32_t gi1_glossy_reflections_cleanup_fireflies_half_radius      = 2;
+        uint32_t gi1_glossy_reflections_cleanup_fireflies_full_radius      = 1;
     };
 
     /**
@@ -161,8 +165,8 @@ protected:
         GI1              &self; //
     };
 
-    // Used for spawning rays from the gbuffers at 1/4 res. By default and interpolating the indirect lighting
-    // at primary path vertices.
+    // Used for spawning rays from the GBuffers at 1/4 res. By default, and interpolating the indirect
+    // lighting at primary path vertices.
     struct ScreenProbes : public Base
     {
         enum SamplingMode
@@ -186,15 +190,15 @@ protected:
 
         static constexpr uint32_t     probe_size_    = 8;
         static constexpr SamplingMode sampling_mode_ = kSamplingMode_QuarterSpp;
-        uint2                         probe_count_;
+        uint2                         probe_count_   = uint2(0, 0);
 
         static constexpr uint32_t probe_spawn_tile_size_ =
             (sampling_mode_ == kSamplingMode_QuarterSpp        ? (probe_size_ << 1)
                 : sampling_mode_ == kSamplingMode_SixteenthSpp ? (probe_size_ << 2)
                                                                : probe_size_);
-        uint32_t   probe_buffer_index_;
-        uint32_t   max_probe_spawn_count;
-        uint32_t   max_ray_count;
+        uint32_t   probe_buffer_index_   = 0;
+        uint32_t   max_probe_spawn_count = 0;
+        uint32_t   max_ray_count         = 0;
         GfxTexture probe_buffers_[2];
         GfxTexture probe_mask_buffers_[2];
         GfxBuffer  probe_sh_buffers_[2];
@@ -235,68 +239,74 @@ protected:
         HashGridCache &operator=(HashGridCache const &other)     = delete;
         HashGridCache &operator=(HashGridCache &&other) noexcept = delete;
 
-        void ensureMemoryIsAllocated(CapsaicinInternal const &capsaicin, RenderOptions const &options,
-            std::string_view const &debug_view);
+        void ensureMemoryIsAllocated(RenderOptions const &options, std::string_view const &debug_view);
 
-        uint32_t max_ray_count_;
-        uint32_t num_buckets_;
-        uint32_t num_tiles_;
-        uint32_t num_cells_;
-        uint32_t num_tiles_per_bucket_;
-        uint32_t size_tile_mip0_;
-        uint32_t size_tile_mip1_;
-        uint32_t size_tile_mip2_;
-        uint32_t size_tile_mip3_;
-        uint32_t num_cells_per_tile_mip0_;
-        uint32_t num_cells_per_tile_mip1_;
-        uint32_t num_cells_per_tile_mip2_;
-        uint32_t num_cells_per_tile_mip3_;
-        uint32_t num_cells_per_tile_; // all mips
-        uint32_t first_cell_offset_tile_mip0_;
-        uint32_t first_cell_offset_tile_mip1_;
-        uint32_t first_cell_offset_tile_mip2_;
-        uint32_t first_cell_offset_tile_mip3_;
-        uint32_t debug_bucket_occupancy_histogram_size_;
-        uint32_t debug_bucket_overflow_histogram_size_;
-        uint32_t debug_stats_size_;
-        uint64_t debug_total_memory_size_in_bytes_;
+        uint32_t max_ray_count_                         = 0;
+        uint32_t max_combined_ray_count_                = 0;
+        uint32_t num_buckets_                           = 0;
+        uint32_t num_tiles_                             = 0;
+        uint32_t num_cells_                             = 0;
+        uint32_t num_tiles_per_bucket_                  = 0;
+        uint32_t size_tile_mip0_                        = 0;
+        uint32_t size_tile_mip1_                        = 0;
+        uint32_t size_tile_mip2_                        = 0;
+        uint32_t size_tile_mip3_                        = 0;
+        uint32_t num_cells_per_tile_mip0_               = 0;
+        uint32_t num_cells_per_tile_mip1_               = 0;
+        uint32_t num_cells_per_tile_mip2_               = 0;
+        uint32_t num_cells_per_tile_mip3_               = 0;
+        uint32_t num_cells_per_tile_                    = 0; // all mips
+        uint32_t first_cell_offset_tile_mip0_           = 0;
+        uint32_t first_cell_offset_tile_mip1_           = 0;
+        uint32_t first_cell_offset_tile_mip2_           = 0;
+        uint32_t first_cell_offset_tile_mip3_           = 0;
+        uint32_t debug_bucket_occupancy_histogram_size_ = 0;
+        uint32_t debug_bucket_overflow_histogram_size_  = 0;
+        uint32_t debug_stats_size_                      = 0;
+        uint64_t debug_total_memory_size_in_bytes_      = 0;
 
         GfxBuffer  radiance_cache_hash_buffer_float_[HASHGRID_FLOAT_BUFFER_COUNT];
         GfxBuffer  radiance_cache_hash_buffer_uint_[HASHGRID_UINT_BUFFER_COUNT];
         GfxBuffer  radiance_cache_hash_buffer_uint2_[HASHGRID_UINT2_BUFFER_COUNT];
         GfxBuffer  radiance_cache_hash_buffer_float4_[HASHGRID_FLOAT4_BUFFER_COUNT];
-        uint32_t   radiance_cache_hash_buffer_ping_pong_;
+        uint32_t   radiance_cache_hash_buffer_ping_pong_ = 0;
         GfxBuffer &radiance_cache_hash_buffer_;
-        GfxBuffer &radiance_cache_decay_cell_buffer_;
         GfxBuffer &radiance_cache_decay_tile_buffer_;
         GfxBuffer &radiance_cache_value_buffer_;
+        GfxBuffer &radiance_cache_value_indirect_buffer_;
         GfxBuffer &radiance_cache_update_tile_buffer_;
         GfxBuffer &radiance_cache_update_tile_count_buffer_;
         GfxBuffer &radiance_cache_update_cell_value_buffer_;
+        GfxBuffer &radiance_cache_update_cell_value_indirect_buffer_;
         GfxBuffer &radiance_cache_visibility_buffer_;
-        GfxBuffer &radiance_cache_visibility_count_buffer_;
+        GfxBuffer &radiance_cache_visibility_count_buffer0_;
+        GfxBuffer &radiance_cache_visibility_count_buffer1_;
         GfxBuffer &radiance_cache_visibility_cell_buffer_;
         GfxBuffer &radiance_cache_visibility_query_buffer_;
         GfxBuffer &radiance_cache_visibility_ray_buffer_;
         GfxBuffer &radiance_cache_visibility_ray_count_buffer_;
+        GfxBuffer &radiance_cache_multibounce_info_buffer_;
+        GfxBuffer &radiance_cache_resolve_count_buffer_;
+        GfxBuffer &radiance_cache_resolve_buffer_;
         GfxBuffer &radiance_cache_packed_tile_count_buffer0_;
         GfxBuffer &radiance_cache_packed_tile_count_buffer1_;
         GfxBuffer &radiance_cache_packed_tile_index_buffer0_;
         GfxBuffer &radiance_cache_packed_tile_index_buffer1_;
         GfxBuffer &radiance_cache_debug_cell_buffer_;
-        GfxBuffer &radiance_cache_debug_bucket_occupancy_buffer_;
-        GfxBuffer &radiance_cache_debug_bucket_overflow_count_buffer_;
-        GfxBuffer &radiance_cache_debug_bucket_overflow_buffer_;
-        GfxBuffer &radiance_cache_debug_free_bucket_buffer_;
-        GfxBuffer &radiance_cache_debug_used_bucket_buffer_;
+        GfxBuffer &radiance_cache_debug_decay_cell_buffer_;
+        GfxBuffer &radiance_cache_debug_stats_bucket_occupancy_buffer_;
+        GfxBuffer &radiance_cache_debug_stats_bucket_overflow_count_buffer_;
+        GfxBuffer &radiance_cache_debug_stats_bucket_overflow_buffer_;
+        GfxBuffer &radiance_cache_debug_stats_free_bucket_buffer_;
+        GfxBuffer &radiance_cache_debug_stats_used_bucket_buffer_;
         GfxBuffer &radiance_cache_debug_stats_buffer_;
         GfxBuffer  radiance_cache_debug_stats_readback_buffers_[kGfxConstant_BackBufferCount];
         bool       radiance_cache_debug_stats_readback_is_pending_[kGfxConstant_BackBufferCount];
 
         std::vector<float> debug_bucket_occupancy_histogram_;
         std::vector<float> debug_bucket_overflow_histogram_;
-        float              debug_free_bucket_count_;
-        float              debug_used_bucket_count_;
+        float              debug_free_bucket_count_ = 0.0F;
+        float              debug_used_bucket_count_ = 0.0F;
     };
 
     // Used for sampling the direct lighting at primary (i.e., direct lighting; disabled by default) and
@@ -318,7 +328,7 @@ protected:
         WorldSpaceReSTIR &operator=(WorldSpaceReSTIR const &other)     = delete;
         WorldSpaceReSTIR &operator=(WorldSpaceReSTIR &&other) noexcept = delete;
 
-        void ensureMemoryIsAllocated(CapsaicinInternal const &capsaicin);
+        void ensureMemoryIsAllocated();
 
         GfxBuffer reservoir_hash_buffers_[2];
         GfxBuffer reservoir_hash_count_buffers_[2];
@@ -330,7 +340,7 @@ protected:
         GfxBuffer reservoir_indirect_sample_normal_buffers_[2];
         GfxBuffer reservoir_indirect_sample_material_buffer_;
         GfxBuffer reservoir_indirect_sample_reservoir_buffers_[2];
-        uint32_t  reservoir_indirect_sample_buffer_index_;
+        uint32_t  reservoir_indirect_sample_buffer_index_ = 0;
     };
 
     // Used for tracing and denoising glossy reflections.
@@ -362,7 +372,7 @@ protected:
         GfxBuffer rt_sample_count_buffer_;
     };
 
-    // Used for image-space spatiotemporal denoising of the probes' interpolation results.
+    // Used for image-space spatio-temporal denoising of the probes' interpolation results.
     struct GIDenoiser : public Base
     {
         explicit GIDenoiser(GI1 &gi1);
@@ -375,14 +385,12 @@ protected:
 
         void ensureMemoryIsAllocated(CapsaicinInternal const &capsaicin);
 
-        GfxTexture blur_masks_[2];
+        GfxTexture blur_mask_;
         GfxTexture color_buffers_[2];
         GfxTexture color_delta_buffers_[2];
-        uint32_t   color_buffer_index_;
-        GfxBuffer  blur_sample_count_buffer_;
+        uint32_t   color_buffer_index_ = 0;
     };
 
-    glm::vec3        previous_camera_eye_;
     RenderOptions    options_;
     std::string_view debug_view_;
     GfxTexture       depth_buffer_;
@@ -390,14 +398,14 @@ protected:
     GfxBuffer        draw_command_buffer_;
     GfxBuffer        dispatch_command_buffer_;
 
-    // GI-1.0 building blocks:
+    // GI-1 building blocks:
     ScreenProbes      screen_probes_;
     HashGridCache     hash_grid_cache_;
     WorldSpaceReSTIR  world_space_restir_;
     GlossyReflections glossy_reflections_;
     GIDenoiser        gi_denoiser_;
 
-    // GI-1.0 kernels:
+    // GI-1 kernels:
     GfxProgram gi1_program_;
     GfxKernel  resolve_gi1_kernel_;
     GfxKernel  clear_counters_kernel_;
@@ -430,7 +438,9 @@ protected:
 
     // Hash grid cache kernels:
     GfxKernel purge_tiles_kernel_;
+    GfxKernel populate_multibounce_cells_kernel_;
     GfxKernel populate_cells_kernel_;
+    GfxKernel update_multibounce_cells_kernel_;
     GfxKernel update_tiles_kernel_;
     GfxKernel resolve_cells_kernel_;
     GfxKernel clear_bucket_overflow_count_kernel_;
@@ -443,6 +453,7 @@ protected:
     // World-space ReSTIR kernels:
     GfxKernel clear_reservoirs_kernel_;
     GfxKernel generate_reservoirs_kernel_;
+    GfxKernel generate_multibounce_reservoirs_kernel_;
     GfxKernel compact_reservoirs_kernel_;
     GfxKernel resample_reservoirs_kernel_;
 
@@ -456,7 +467,6 @@ protected:
 
     // GI denoiser kernels:
     GfxKernel reproject_gi_kernel_;
-    GfxKernel filter_blur_mask_kernel_;
     GfxKernel filter_gi_kernel_;
 };
 } // namespace Capsaicin

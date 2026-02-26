@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,8 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#ifndef USE_INLINE_RT
+#define USE_INLINE_RT 1
+#endif
+
 #include "visibility_buffer_shared.h"
-#include "geometry/path_tracing_shared.h"
+#include "ray_tracing/path_tracing_shared.h"
 
 StructuredBuffer<DrawConstantsRT> g_VBConstants;
 RayCamera g_RayCamera;
@@ -60,19 +64,19 @@ RWTexture2D<float> g_Roughness;
 // See "mesh.hlsl".
 #define HAS_PREVIOUS_INTERSECT
 #include "geometry/geometry.hlsl"
-#include "geometry/intersection.hlsl"
-#include "geometry/ray_intersection.hlsl"
-#include "geometry/ray_tracing.hlsl"
 #include "math/math.hlsl"
 #include "math/transform.hlsl"
 #include "materials/materials.hlsl"
+#include "ray_tracing/trace_ray.hlsl"
+#include "ray_tracing/intersect_data.hlsl"
+#include "ray_tracing/ray_tracing.hlsl"
 
-struct PathData
+struct [raypayload] PathData
 {
-    uint2 pixel;
+    uint2 pixel : write(caller) : read(caller, closesthit);
 };
 
-void pathHit(PathData pathData, RayDesc ray, HitInfo hitData)
+void pathHit(PathData pathData, HitInfo hitData)
 {
     // Get instance information for current object
     Instance instance = g_InstanceBuffer[hitData.instanceIndex];
@@ -157,7 +161,7 @@ void pathHit(PathData pathData, RayDesc ray, HitInfo hitData)
     if (isInstanceVolatile(instance))
     {
         Triangle prevTriData = fetchPrevVertices(instance, hitData.primitiveIndex);
-        float3 prevPosition = interpolate(prevTriData.v0, prevTriData.v1, prevTriData.v2, hitData.barycentrics);
+        prevPosition = interpolate(prevTriData.v0, prevTriData.v1, prevTriData.v2, hitData.barycentrics);
     }
     float3 prevPositionW = transformPoint(prevPosition, g_PreviousTransformBuffer[instance.transform_index]);
     float3 prevPositionVP = transformPointProjection(prevPositionW, g_VBConstants[0].prevViewProjection);
@@ -188,26 +192,27 @@ void visibilityRT(uint2 did, uint2 dimensions)
     float2 pixelRay = (float2) pixel + 0.5f.xx + g_VBConstants[0].jitter;
 
     // Calculate primary ray
-    RayDesc ray = generateCameraRay(pixelRay, g_RayCamera);
+    RayInfo ray = generateCameraRay(pixelRay, g_RayCamera);
 
     PathData pathData;
     pathData.pixel = pixel;
-
-#ifdef USE_INLINE_RT
+#if USE_INLINE_RT
     ClosestRayQuery rayQuery = TraceRay<ClosestRayQuery>(ray);
 
     // Check for valid intersection
     if (rayQuery.CommittedStatus() != COMMITTED_NOTHING)
     {
-        pathHit(pathData, ray, GetHitInfoRtInlineCommitted(rayQuery));
+        pathHit(pathData,  GetHitInfoRtInlineCommitted(rayQuery));
     }
 #else
-    TraceRay(g_Scene, CLOSEST_RAY_FLAGS, 0xFFu, 0, 0, 0, ray, pathData);
+    TraceRayClosest(ray, pathData);
 #endif
 }
 
+#if USE_INLINE_RT
 [numthreads(4, 8, 1)]
 void VisibilityBufferRT(in uint2 did : SV_DispatchThreadID)
 {
     visibilityRT(did, g_VBConstants[0].dimensions);
 }
+#endif

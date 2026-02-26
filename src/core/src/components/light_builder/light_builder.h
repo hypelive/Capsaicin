@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -51,11 +51,19 @@ public:
 
     struct RenderOptions
     {
-        bool delta_light_enable       = true; /**< True to enable delta light in light sampling */
-        bool area_light_enable        = true; /**< True to enable area lights in light sampling */
-        bool environment_light_enable = true; /**< True to enable environment lights in light sampling */
-        bool environment_light_cosine_enable =
-            false; /**< True to enable cosine sampling environment lights */
+        enum class EnvironmentSamplingMode : uint8_t
+        {
+            Uniform    = 0, /**< Uniform light sampling */
+            Cosine     = 1, /**< Cosine weighted light sampling */
+            Importance = 2  /**< Importance sampled light sampling */
+        };
+
+        bool    delta_light_enable       = true; /**< True to enable delta light in light sampling */
+        bool    area_light_enable        = true; /**< True to enable area lights in light sampling */
+        bool    environment_light_enable = true; /**< True to enable environment lights in light sampling */
+        uint8_t environment_sampling_mode =
+            static_cast<uint8_t>(EnvironmentSamplingMode::Uniform); /**< Light sampling mode */
+
         bool low_emission_area_lights_disable =
             false;                           /**< True to disable area lights with low base emission */
         float low_emission_threshold = 1.0F; /**< Luminance threshold for selecting low emission lights */
@@ -123,16 +131,40 @@ public:
     void addProgramParameters(CapsaicinInternal const &capsaicin, GfxProgram const &program) const noexcept;
 
     /**
-     * Gets count of enabled area lights in current scene.
+     * Get the number of enabled area lights in current scene.
      * @return The area light count.
      */
     [[nodiscard]] uint32_t getAreaLightCount() const;
 
     /**
-     * Gets count of enabled delta lights (point,spot,direction) in current scene.
-     * @return The delta light count.
+     * Get the number of enabled point lights in current scene.
+     * @return The number of point lights.
+     */
+    [[nodiscard]] uint32_t getPointLightCount() const;
+
+    /**
+     * Get the number of enabled spot-lights in current scene.
+     * @return The number of spot-lights.
+     */
+    [[nodiscard]] uint32_t getSpotLightCount() const;
+
+    /**
+     * Get the number of enabled directional lights in current scene.
+     * @return The number of directional lights.
+     */
+    [[nodiscard]] uint32_t getDirectionalLightCount() const;
+
+    /**
+     * Get the number of enabled delta lights (combined point/spot/directional) in current scene.
+     * @return The number of delta lights.
      */
     [[nodiscard]] uint32_t getDeltaLightCount() const;
+
+    /**
+     * Get the number of enabled environment lights in current scene.
+     * @return The number of environment lights.
+     */
+    [[nodiscard]] uint32_t getEnvironmentLightCount() const;
 
     /**
      * Gets approximate light count within the light buffer.
@@ -168,9 +200,11 @@ private:
 
     size_t   lightHash       = 0;
     uint32_t areaLightTotal  = std::numeric_limits<uint32_t>::max(); /**< Number of area lights in meshes */
-    uint32_t areaLightCount  = 0;     /**< Number of area lights in light buffer */
-    uint32_t deltaLightCount = 0;     /**< Number of delta lights in light buffer */
-    uint32_t environmentMapCount = 0; /**< Number of environment map lights in buffer */
+    uint32_t areaLightCount  = 0;       /**< Number of area lights in light buffer */
+    uint32_t pointLightCount = 0;       /**< Number of point lights in light buffer */
+    uint32_t spotLightCount  = 0;       /**< Number of spot-lights in light buffer */
+    uint32_t directionalLightCount = 0; /**< Number of directional lights in light buffer */
+    uint32_t environmentMapCount   = 0; /**< Number of environment map lights in buffer */
 
     bool lightsUpdated        = true;
     bool lightSettingsChanged = true;

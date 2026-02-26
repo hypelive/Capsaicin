@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -109,30 +109,31 @@ inline static RayCamera caclulateRayCamera(Camera camera, uint2 dimensions)
 }
 
 #ifndef __cplusplus
+#    include "ray_tracing.hlsl"
+
 /**
  * Generate a primary ray originating from the camera for a given pixel.
  * @param pixel Requested pixel (pixel center is at 0.5 +-0.5)
  * @param rayCamera Camera raytracing parameters.
  * @return The generated ray.
  */
-RayDesc generateCameraRay(float2 pixel, in RayCamera rayCamera)
+RayInfo generateCameraRay(float2 pixel, in RayCamera rayCamera)
 {
     // Setup the ray
-    RayDesc ray;
+    RayInfo ray;
 
     // Get direction from origin to current pixel in screen plane
     float3 direction =
         (pixel.x * rayCamera.directionX) + (pixel.y * rayCamera.directionY) + rayCamera.directionTL;
 
     // Set the ray origin
-    ray.Origin = rayCamera.origin;
+    ray.origin = rayCamera.origin;
 
     // Compute the ray direction for this pixel
-    ray.Direction = normalize(direction);
+    ray.direction = normalize(direction);
 
     // Get adjusted range values
-    ray.TMin = rayCamera.range.x;
-    ray.TMax = rayCamera.range.y;
+    ray.range = rayCamera.range;
 
     return ray;
 }

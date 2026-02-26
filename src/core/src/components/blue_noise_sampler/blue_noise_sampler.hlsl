@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,108 +22,222 @@ THE SOFTWARE.
 
 #ifndef BLUE_NOISE_SAMPLER_HLSL
 #define BLUE_NOISE_SAMPLER_HLSL
+
 // Requires the following data to be defined in any shader that uses this file
 StructuredBuffer<uint> g_SobolBuffer;
 StructuredBuffer<uint> g_RankingTile;
 StructuredBuffer<uint> g_ScramblingTile;
+uint g_RandomSeed;
 
 #define GOLDEN_RATIO 1.61803398874989484820f
 
 namespace NoExport
 {
+    float samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(uint2 pixel, uint index, uint dimension)
+    {
+        // A Low-Discrepancy Sampler that Distributes Monte Carlo Errors as a Blue Noise in Screen Space - Heitz etal
 
-float samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(in int pixel_i, in int pixel_j, in int sampleIndex, in int sampleDimension)
-{
-    // A Low-Discrepancy Sampler that Distributes Monte Carlo Errors as a Blue Noise in Screen Space - Heitz etal
+        // Xor index based on optimized ranking
+        uint rankedSampleIndex = index ^ g_RankingTile[dimension + (pixel.x + pixel.y * 128) * 8];
 
-    // wrap arguments
-    pixel_i         = (pixel_i & 127);
-    pixel_j         = (pixel_j & 127);
-    sampleIndex     = (sampleIndex & 255);
-    sampleDimension = (sampleDimension & 255);
+        // Fetch value in sequence
+        uint value = g_SobolBuffer[dimension + rankedSampleIndex * 256];
 
-    // xor index based on optimized ranking
-    int rankedSampleIndex = sampleIndex ^ g_RankingTile[sampleDimension + (pixel_i + pixel_j * 128) * 8];
+        // If the dimension is optimized, xor sequence value based on optimized scrambling
+        value = value ^ g_ScramblingTile[(dimension % 8) + (pixel.x + pixel.y * 128) * 8];
 
-    // fetch value in sequence
-    int value = g_SobolBuffer[sampleDimension + rankedSampleIndex * 256];
-
-    // If the dimension is optimized, xor sequence value based on optimized scrambling
-    value = value ^ g_ScramblingTile[(sampleDimension % 8) + (pixel_i + pixel_j * 128) * 8];
-
-    // convert to float and return
-    return (0.5f + value) / 256.0f;
+        // Convert to float and return
+        return (0.5f + value) / 256.0f;
+    }
 }
 
-float BlueNoise_Sample1D(in uint2 pixel, in uint sample_index, in uint dimension_offset)
-{
-    // https://blog.demofox.org/2017/10/31/animating-noise-for-integration-over-time/
-    float s = samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset);
-
-    return fmod(s + (sample_index & 255) * GOLDEN_RATIO, 1.0f);
-}
-
-float BlueNoise_Sample1D(in uint2 pixel, in uint sample_index)
-{
-    return BlueNoise_Sample1D(pixel, sample_index, 0);
-}
-
-float2 BlueNoise_Sample2D(in uint2 pixel, in uint sample_index, in uint dimension_offset)
-{
-    // https://blog.demofox.org/2017/10/31/animating-noise-for-integration-over-time/
-    float2 s = float2(samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset + 0),
-                      samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset + 1));
-
-    return fmod(s + (sample_index & 255) * GOLDEN_RATIO, 1.0f);
-}
-
-float2 BlueNoise_Sample2D(in uint2 pixel, in uint sample_index)
-{
-    return BlueNoise_Sample2D(pixel, sample_index, 0);
-}
-
-float3 BlueNoise_Sample3D(in uint2 pixel, in uint sample_index, in uint dimension_offset)
-{
-    // https://blog.demofox.org/2017/10/31/animating-noise-for-integration-over-time/
-    float3 s = float3(samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset + 0),
-                      samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset + 1),
-                      samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel.x, pixel.y, 0, dimension_offset + 2));
-
-    return fmod(s + (sample_index & 255) * GOLDEN_RATIO, 1.0f);
-}
-
-float3 BlueNoise_Sample3D(in uint2 pixel, in uint sample_index)
-{
-    return BlueNoise_Sample3D(pixel, sample_index, 0);
-}
-    
-}
-
+/**
+ * Generate random numbers using a blue noise sampling function.
+ * Each new sample is taken from the next available blue noise sequence dimension.
+ * This should only be used when each call to one of this classes rand functions is sampling from a different distribution.
+ */
 class BlueNoiseSampler
 {
     uint2 pixel;
-    uint sample_index;
-    uint dimension_offset;
+    uint index;
+    uint dimension;
 
+    /**
+     * Generate a random number.
+     * @return The new number (range [0, 1)).
+     */
     float rand()
     {
-        return NoExport::BlueNoise_Sample1D(pixel, sample_index++, dimension_offset);
+        if (dimension >= 256)
+        {
+            dimension = 0;
+        }
+        float s = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+
+        // https://blog.demofox.org/2017/10/31/animating-noise-for-integration-over-time/
+        return fmod(s + (index & 255) * GOLDEN_RATIO, 1.0f);
     }
 
+    /**
+     * Generate 2 random numbers.
+     * @return The new numbers (range [0, 1)).
+     */
     float2 rand2()
     {
-        return NoExport::BlueNoise_Sample2D(pixel, sample_index++, dimension_offset);
+        if (dimension >= 255)
+        {
+            dimension = 0;
+        }
+        float s1 = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+        float s2 = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+
+        return fmod(float2(s1, s2) + (index & 255) * GOLDEN_RATIO, 1.0f);
     }
 
+    /**
+     * Generate 3 random numbers.
+     * @return The new numbers (range [0, 1)).
+     */
     float3 rand3()
     {
-        return NoExport::BlueNoise_Sample3D(pixel, sample_index++, dimension_offset);
+        if (dimension >= 254)
+        {
+            dimension = 0;
+        }
+        float s1 = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+        float s2 = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+        float s3 = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension++);
+
+        return fmod(float3(s1, s2, s3) + (index & 255) * GOLDEN_RATIO, 1.0f);
     }
 };
 
-BlueNoiseSampler MakeBlueNoiseSampler(uint2 pixel, uint sample_index, uint dimension_offset = 0)
+/**
+ * Initialise a blue noise sample generator.
+ * @param pixel     Pixel value to initialise random with.
+ * @param index     Index into the sequence (e.g. frame number).
+ * @param dimension (Optional) The dimension of the sequence to start at.
+ * @return The new blue noise sampler.
+ */
+BlueNoiseSampler MakeBlueNoiseSampler(uint2 pixel, uint index, uint dimension = 0)
 {
-    BlueNoiseSampler ret = { pixel, sample_index, dimension_offset };
+    BlueNoiseSampler ret = { pixel % 128, index, dimension + g_RandomSeed };
+    return ret;
+}
+
+/**
+ * Generate 1D number sequence using a progressive blue noise sampling function.
+ * Each new sample is taken from the same blue noise sequence.
+ */
+class BlueNoiseSampler1D
+{
+    uint2 pixel;
+    uint index;
+    uint dimension;
+
+    /**
+     * Generate a random number.
+     * @return The new number (range [0, 1)).
+     */
+    float rand()
+    {
+        float s = NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension);
+        return fmod(s + (index++ & 255) * GOLDEN_RATIO, 1.0f);
+    }
+};
+
+/**
+ * Initialise a 1D sequence blue noise sample generator.
+ * @param pixel     Pixel value to initialise random with.
+ * @param dimension The current dimension of the sequence (0-indexed).
+ * @return The 1D new blue noise sampler.
+ */
+BlueNoiseSampler1D MakeBlueNoiseSampler1D(uint2 pixel, uint dimension = 0)
+{
+    BlueNoiseSampler1D ret =
+    {
+        pixel % 128,
+        0,
+        (dimension + g_RandomSeed) % 256,
+    };
+    return ret;
+}
+
+/**
+ * Initialise a 1D sequence blue noise sample generator from a dimensional blue noise sampler.
+ * This can be used to branch off from an existing BlueNoiseSampler and locally generate additional samples
+ *  from within the same dimension.
+ * @param strat  The dimensional sampler to initialise from.
+ * @param offset (Optional) The number of values expected to be taken with this sampler that is used to offset the start index accordingly.
+ * @return The new 1D blue noise sampler.
+ */
+BlueNoiseSampler1D MakeBlueNoiseSampler1D(BlueNoiseSampler strat, uint offset = 0)
+{
+    BlueNoiseSampler1D ret =
+    {
+        strat.pixel,
+        strat.index * offset,
+        strat.dimension,
+    };
+    return ret;
+}
+
+/**
+ * Generate 2D number sequence using a progressive blue noise Sobol sampling function.
+ * Each new sample is taken from the same Sobol sequence.
+ */
+class BlueNoiseSampler2D
+{
+    uint2 pixel;
+    uint index;
+    uint dimension;
+
+    /**
+     * Generate 2 random numbers.
+     * @return The new numbers (range [0->1)).
+     */
+    float2 rand2()
+    {
+        float2 s = float2(NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension),
+        NoExport::samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp(pixel, 0, dimension + 1));
+
+        return fmod(s + (index++ & 255) * GOLDEN_RATIO, 1.0f);
+    }
+};
+
+/**
+ * Initialise a 2D sequence blue noise sample generator.
+ * @param pixel     Pixel value to initialise random with.
+ * @param dimension The current dimension of the sequence (0-indexed).
+ * @return The 2D new blue noise sampler.
+ */
+BlueNoiseSampler2D MakeBlueNoiseSampler2D(uint2 pixel, uint dimension = 0)
+{
+    BlueNoiseSampler2D ret =
+    {
+        pixel % 128,
+        0,
+        (dimension + g_RandomSeed) % 255,
+    };
+    return ret;
+}
+
+/**
+ * Initialise a 2D sequence blue noise sample generator from a dimensional blue noise sampler.
+ * This can be used to branch off from an existing BlueNoiseSampler and locally generate additional samples
+ *  from within the same dimension.
+ * @param strat  The dimensional sampler to initialise from.
+ * @param offset (Optional) The number of values expected to be taken with this sampler that is used to offset the start index accordingly.
+ * @return The new 2D blue noise sampler.
+ */
+BlueNoiseSampler2D MakeBlueNoiseSampler2D(BlueNoiseSampler strat, uint offset = 0)
+{
+    BlueNoiseSampler2D ret =
+    {
+        strat.pixel,
+        strat.index * offset,
+        strat.dimension,
+    };
     return ret;
 }
 

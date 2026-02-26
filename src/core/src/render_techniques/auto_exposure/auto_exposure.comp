@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -33,17 +33,32 @@ RWStructuredBuffer<uint> g_Histogram; // Must be cleared to 0 on creation/scene 
 RWStructuredBuffer<float> g_KeySceneLuminance;
 RWStructuredBuffer<float> g_Exposure;
 
-#define HDR_MAX 50.0f
+#define HDR_MAX 1.0f
+#define HDR_MIN 0.0001f
 
 #define HISTOGRAM_GROUP_SIZE 16
-#define HISTOGRAM_SIZE 128
+#define HISTOGRAM_SIZE 64
 groupshared uint lds_Histogram[HISTOGRAM_SIZE];
 
 [numthreads(HISTOGRAM_GROUP_SIZE, HISTOGRAM_GROUP_SIZE, 1)]
 void CalculateHistogram(uint2 did : SV_DispatchThreadID, uint gtid : SV_GroupIndex)
 {
     // Initialize the local histogram data
+#if (HISTOGRAM_GROUP_SIZE * HISTOGRAM_GROUP_SIZE) < HISTOGRAM_SIZE
+    const uint groupSize = HISTOGRAM_GROUP_SIZE * HISTOGRAM_GROUP_SIZE;
+    uint loops = (HISTOGRAM_SIZE + groupSize - 1) / groupSize;
+    for (uint i = 0; i < loops; ++i)
+    {
+        const uint lid = gtid + (i * groupSize);
+        if (lid >= HISTOGRAM_SIZE)
+        {
+            break;
+        }
+        lds_Histogram[lid] = 0;
+    }
+#else
     lds_Histogram[gtid] = 0;
+#endif
     GroupMemoryBarrierWithGroupSync();
 
     if (all(did < g_BufferDimensions))
@@ -54,20 +69,20 @@ void CalculateHistogram(uint2 did : SV_DispatchThreadID, uint gtid : SV_GroupInd
 
         // Convert to log luminance and scale it to [0, 1] based on our min and max HDR range (min is set to 0)
         const float maxHDR = log2(HDR_MAX);
-        const float minHDR = log2(FLT_MIN);
-        const float rangeHDR = maxHDR - minHDR;
-        float logLuminance = (lum > FLT_MIN) ? saturate((log2(lum) - minHDR) / rangeHDR) : 0.0f;
+        const float minHDR = log2(HDR_MIN);
+        const float rangeHDR = 1.0 / (maxHDR - minHDR);
+        float logLuminance = (lum > HDR_MIN) ? ((log2(lum) - minHDR) * rangeHDR) : 0.0f;
 
         // Convert to [1, HISTOGRAM_SIZE] range where 0 stores all zero value pixels
-        uint binIndex = (lum > FLT_MIN) ? uint(logLuminance * float(HISTOGRAM_SIZE - 1) + 1.0f) : 0.0f;
+        uint binIndex = (lum > HDR_MIN) ? min(uint(logLuminance * float(HISTOGRAM_SIZE - 1)) + 1, HISTOGRAM_SIZE - 1) : 0;
 
         // Add to the corresponding local histogram bucket
         const uint minWaveHistogram = min(WaveGetLaneCount(), HISTOGRAM_SIZE);
         // Generate bitmask with 1 bit for every active thread in the wave (should be optimised out by compiler)
-        uint4 laneMask = uint4(-1L >> (32 - min(minWaveHistogram, 32)),
-            minWaveHistogram > 32 ? -1L >> (32 - min(minWaveHistogram - 32, 32)) : 0,
-            minWaveHistogram > 64 ? -1L >> (32 - min(minWaveHistogram - 64, 32)) : 0,
-            minWaveHistogram > 96 ? -1L >> (32 - min(minWaveHistogram - 96, 32)) : 0);
+        uint4 laneMask = uint4(0xFFFFFFFFUL >> (32 - min(minWaveHistogram, 32)),
+            minWaveHistogram > 32 ? 0xFFFFFFFFUL >> (32 - min(minWaveHistogram - 32, 32)) : 0,
+            minWaveHistogram > 64 ? 0xFFFFFFFFUL >> (32 - min(minWaveHistogram - 64, 32)) : 0,
+            minWaveHistogram > 96 ? 0xFFFFFFFFUL >> (32 - min(minWaveHistogram - 96, 32)) : 0);
         // To avoid multiple threads in a wave writing to the same location we use a ballot to determine which threads want
         //   to write to each bin and the corresponding thread count. Then only the first thread for each output location writes
         //   the total count for that bin.
@@ -88,13 +103,33 @@ void CalculateHistogram(uint2 did : SV_DispatchThreadID, uint gtid : SV_GroupInd
 
     GroupMemoryBarrierWithGroupSync();
 
-    if (gtid >= HISTOGRAM_SIZE || lds_Histogram[gtid] == 0)
+    // Write out the local histogram values into global memory
+#if (HISTOGRAM_GROUP_SIZE * HISTOGRAM_GROUP_SIZE) < HISTOGRAM_SIZE
+    for(uint j = 0; j < loops; ++j)
+    {
+        const uint lid = gtid + (j * groupSize);
+        if (lid >= HISTOGRAM_SIZE)
+        {
+            break;
+        }
+        const uint value = lds_Histogram[lid];
+        if (value != 0)
+        {
+            InterlockedAdd(g_Histogram[lid], lds_Histogram[lid]);
+        }
+    }
+#else
+    if (gtid >= HISTOGRAM_SIZE)
     {
         return;
     }
 
-    // Write out the local histogram values into global memory
-    InterlockedAdd(g_Histogram[gtid], lds_Histogram[gtid]);
+    const uint value = lds_Histogram[gtid];
+    if (value != 0)
+    {
+        InterlockedAdd(g_Histogram[gtid], lds_Histogram[gtid]);
+    }
+#endif
 }
 
 [numthreads(HISTOGRAM_SIZE, 1, 1)]
@@ -103,8 +138,18 @@ void CalculateExposure(uint gtid : SV_GroupIndex)
     // We calculate the exposure by getting the key scene luminance value from a pre-calculated histogram of the scenes luminance (log2 space)
 
     // Get the corresponding value from the global histogram
-    uint histogramValue = g_Histogram[gtid];
-    uint value = histogramValue * gtid; // weighted contribution
+    float histogramValue = (float)g_Histogram[gtid];
+
+    const float maxHDR = log2(HDR_MAX);
+    const float minHDR = log2(HDR_MIN);
+    const float rangeHDR = maxHDR - minHDR;
+    const float rangeInterval = rangeHDR / float(HISTOGRAM_SIZE - 1);
+    float value = 0.0f;
+    if (gtid != 0)
+    {
+        // Convert back from histogram value to linear space to get weighted contribution
+        value = histogramValue * exp2((((float)gtid - 0.5f) * rangeInterval) + minHDR);
+    }
 
     // Reset global histogram for next frame
     g_Histogram[gtid] = 0;
@@ -119,7 +164,7 @@ void CalculateExposure(uint gtid : SV_GroupIndex)
         if (WaveIsFirstLane())
         {
             const uint waveID = gtid / WaveGetLaneCount();
-            lds_Histogram[waveID] = value;
+            lds_Histogram[waveID] = asuint(value);
         }
         GroupMemoryBarrierWithGroupSync();
 
@@ -130,7 +175,7 @@ void CalculateExposure(uint gtid : SV_GroupIndex)
         }
 
         // Use the current wave to combine across group
-        value = lds_Histogram[gtid];
+        value = asfloat(lds_Histogram[gtid]);
         value = WaveActiveSum(value);
     }
 
@@ -143,34 +188,24 @@ void CalculateExposure(uint gtid : SV_GroupIndex)
     //  Since this is only run on thread 0 then 'histogramValue' will contain the pixels
     //  mapped to bucket 0 which contain the non-contributing pixels
     float numPixels = float(g_BufferDimensions.x * g_BufferDimensions.y);
-    float weightedAverage = (value / max(numPixels - (float)histogramValue, 1.0)) - 1.0f;
+    float weightedAverage = value / max(numPixels - histogramValue, 1.0f);
 
-    // Convert back from histogram value to luminance
-    const float maxHDR = log2(HDR_MAX);
-    const float minHDR = log2(FLT_MIN);
-    const float rangeHDR = maxHDR - minHDR;
-    float weightedAverageLuminance = exp2((weightedAverage / float(HISTOGRAM_SIZE - 1)) * rangeHDR + minHDR);
+    // Calculate middle-grey using an exposure compensation curve
+    // Modified version from "Perceptual Effects in Real-time Tone Mapping" - Krawczyk et al
+    float dg = 1.23f - (1.0f / (1.0f + log10(weightedAverage + 6.0f)));
 
-    float ya;
+    float ya = weightedAverage;
     if (g_FrameTime > 0.0f)
     {
         // Apply adaptation to key scene luminance
         float oldYa = g_KeySceneLuminance[0];
-        ya = oldYa + (weightedAverageLuminance - oldYa) * (1.0f - exp(-1.0f * g_FrameTime * 2.5f));
-    }
-    else
-    {
-        // If first frame then just store value
-        ya = weightedAverageLuminance;
+        float dg2 = (dg * 0.4f) + ((1.0f - dg) * 0.1f);
+        ya = oldYa + (ya - oldYa) * (1.0f - exp(-g_FrameTime / dg2));
     }
     g_KeySceneLuminance[0] = ya;
 
-    // Calculate middle-grey using an exposure compensation curve
-    // "Perceptual Effects in Real-time Tone Mapping" - Krawczyk et al
-    float dg = 1.03f - (2.0f / (2.0f + log10(ya + 1.0f)));
-
     // Calculate final exposure
-    float exposure = dg / ya;
+    float exposure = min(dg / ya, 500.0f);
     exposure *= g_ExposureBias;
-    g_Exposure[0] = min(exposure, 500.0f);
+    g_Exposure[0] = exposure;
 }

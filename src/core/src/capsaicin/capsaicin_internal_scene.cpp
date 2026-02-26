@@ -1,5 +1,5 @@
 /**********************************************************************
-Copyright (c) 2024 Advanced Micro Devices, Inc. All rights reserved.
+Copyright (c) 2025 Advanced Micro Devices, Inc. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -96,6 +96,7 @@ bool CapsaicinInternal::setScene(std::filesystem::path const &fileName) noexcept
             if (!component->init(*this))
             {
                 GFX_PRINTLN("Error: Failed to initialise component: %s", name.data());
+                return false;
             }
         }
 
@@ -106,6 +107,7 @@ bool CapsaicinInternal::setScene(std::filesystem::path const &fileName) noexcept
             if (!i->init(*this))
             {
                 GFX_PRINTLN("Error: Failed to initialise render technique: %s", i->getName().data());
+                return false;
             }
         }
     }
@@ -279,7 +281,12 @@ GfxCamera const &CapsaicinInternal::getCamera() const
     return *camera_ref;
 }
 
-bool CapsaicinInternal::loadSceneFile(std::filesystem::path const &fileName, bool const append) noexcept
+GfxCamera const &CapsaicinInternal::getPrevCamera() const
+{
+    return camera_prev_backup_;
+}
+
+bool CapsaicinInternal::loadSceneFile(std::filesystem::path const &fileName, bool append) noexcept
 {
     // Normalise file name and standardise path separators
     std::filesystem::path const normFileName = fileName.lexically_normal().generic_string();
@@ -313,6 +320,7 @@ bool CapsaicinInternal::loadSceneFile(std::filesystem::path const &fileName, boo
 
     if (!loaded)
     {
+        append = false;
         if (!createBlankScene())
         {
             return false;
@@ -415,7 +423,7 @@ bool CapsaicinInternal::loadSceneYAML(std::filesystem::path const &fileName) noe
             }
         }
 
-        if (hasOption<float>("auto_exposure_value"))
+        if (hasOption<float>("auto_exposure_value") && getOption<float>("auto_exposure_value") == 0.0F)
         {
             if (auto exposure = data["tonemap_exposure"])
             {
@@ -559,11 +567,13 @@ bool CapsaicinInternal::generateEnvironmentMap(std::filesystem::path const &file
     // Create environment cube map texture
     uint32_t const environment_buffer_mips = gfxCalculateMipCount(environmentSize);
     environment_buffer_ =
-        gfxCreateTextureCube(gfx_, environmentSize, DXGI_FORMAT_R16G16B16A16_FLOAT, environment_buffer_mips);
+        gfxCreateTextureCube(gfx_, environmentSize, DXGI_FORMAT_R16G16B16A16_FLOAT, environment_buffer_mips,
+            nullptr, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
     environment_buffer_.setName("Capsaicin_EnvironmentBuffer");
 
-    GfxTexture const environment_map = gfxCreateTexture2D(gfx_, environment_map_width, environment_map_height,
-        environmentMap->format, environment_map_mip_count);
+    GfxTexture const environment_map =
+        gfxCreateTexture2D(gfx_, environment_map_width, environment_map_height, environmentMap->format,
+            environment_map_mip_count, nullptr, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
     {
         GfxBuffer const upload_buffer = gfxCreateBuffer(gfx_,
             static_cast<size_t>(environment_map_width) * environment_map_height
@@ -907,7 +917,8 @@ void CapsaicinInternal::updateSceneCameraMatrices() noexcept
                 sizeof(camera_matrices_[i]));
         }
     }
-    camera_prev_ = camera;
+    camera_prev_backup_ = camera_prev_;
+    camera_prev_        = camera;
 }
 
 void CapsaicinInternal::updateSceneMeshes() noexcept
@@ -928,7 +939,7 @@ void CapsaicinInternal::updateSceneMeshes() noexcept
         || (hasSharedBuffer("MeshletCull") && getSharedBuffer("MeshletCull").getSize() == 0))
     {
         // We must rebuild meshlet data
-        mesh_updated_ = true;
+        mesh_updated_ = gfxSceneGetObjectCount<GfxInstance>(scene_) > 0;
     }
 
     // Check for change in render options
@@ -1381,7 +1392,7 @@ void CapsaicinInternal::updateSceneMeshes() noexcept
 void CapsaicinInternal::updateSceneInstances() noexcept
 {
     // Update the instance information
-    if (instances_updated_ || mesh_updated_)
+    if ((instances_updated_ || mesh_updated_) && gfxSceneGetObjectCount<GfxInstance>(scene_) > 0)
     {
         GfxCommandEvent const command_event(gfx_, "BuildInstances");
 
