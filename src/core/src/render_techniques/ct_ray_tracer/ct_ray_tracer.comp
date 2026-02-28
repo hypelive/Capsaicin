@@ -1,0 +1,5 @@
+[numthreads(8, 4, 1)]
+void ReferencePT(in uint2 did : SV_DispatchThreadID)
+{
+    pathTracer(did, g_BufferDimensions);
+}
