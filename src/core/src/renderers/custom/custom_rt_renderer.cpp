@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "ct_ray_tracer/ct_ray_tracer.h"
 
 namespace Capsaicin
 {
@@ -23,6 +24,7 @@ public:
         [[maybe_unused]] RenderOptionList const &renderOptions) noexcept override
     {
         std::vector<std::unique_ptr<RenderTechnique>> render_techniques;
+        render_techniques.emplace_back(std::make_unique<CtRayTracer>());
         return render_techniques;
     }
 };

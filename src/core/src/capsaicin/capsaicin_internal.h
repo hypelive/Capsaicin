@@ -819,6 +819,23 @@ public:
      */
     std::vector<NodeTimestamps> getProfiling() noexcept;
 
+    struct MeshInfo
+    {
+        uint vertex_offset_idx[2];
+        uint index_offset_idx;
+        uint index_count;
+        uint vertex_source_offset_idx;
+        uint joints_offset;
+        uint targets_count;
+        uint vertex_count;
+        uint meshlet_count;      /**< Number of meshlets in mesh */
+        uint meshlet_offset_idx; /**< Absolute offset into Meshlet buffer for first meshlet */
+        bool is_animated;
+    };
+
+    // I need more information about the scene for now. It's the easy way how to get the per instance vertex count. 
+    const MeshInfo& getMeshInfo(uint32_t index) { return mesh_infos_[index]; }
+
 private:
     /*
      * Gets configuration options specific to capsaicin itself.
@@ -1110,20 +1127,6 @@ private:
     std::vector<uint32_t>           joint_matrices_offsets_;
     GfxBuffer                       joint_matrices_buffer_; /**< The buffer storing joint matrices. */
     std::vector<InstanceSourceInfo> instance_source_info_data_;
-
-    struct MeshInfo
-    {
-        uint vertex_offset_idx[2];
-        uint index_offset_idx;
-        uint index_count;
-        uint vertex_source_offset_idx;
-        uint joints_offset;
-        uint targets_count;
-        uint vertex_count;
-        uint meshlet_count;      /**< Number of meshlets in mesh */
-        uint meshlet_offset_idx; /**< Absolute offset into Meshlet buffer for first meshlet */
-        bool is_animated;
-    };
 
     std::vector<MeshInfo>               mesh_infos_;
     GfxAccelerationStructure            acceleration_structure_;

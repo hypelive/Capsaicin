@@ -73,5 +73,12 @@ public:
 
 protected:
     RenderOptions options;
+
+    GfxProgram m_shadeVerticesProgram;
+    GfxKernel m_shadeVerticesKernel;
+    GfxProgram m_rtProgram;
+    GfxKernel m_rtKernel;
+
+    GfxBuffer m_vertexCache;
 };
 } // namespace Capsaicin

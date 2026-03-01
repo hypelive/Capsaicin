@@ -1,0 +1,36 @@
+#include "shared.h"
+
+ConstantBuffer<Constants> g_Constants;
+ConstantBuffer<InstanceData> g_InstanceData;
+StructuredBuffer<Instance> g_InstanceBuffer;
+StructuredBuffer<Vertex> g_InputVertices;
+RWStructuredBuffer<ShadedVertex> g_VertexCache;
+StructuredBuffer<float3x4> g_TransformBuffer;
+
+// We have multiple index data sets for the animations.
+uint g_VertexDataIndex;
+
+[numthreads(64, 1, 1)]
+void main(uint did : SV_DispatchThreadID)
+{
+    if (did > g_InstanceData.numVertices)
+    {
+        return;
+    }
+    
+    Instance instance = g_InstanceBuffer[g_InstanceData.instanceId];
+    
+    Vertex input = g_InputVertices[instance.vertex_offset_idx[g_VertexDataIndex] + did];
+    float3 position = input.getPosition();
+    float2 uv = input.getUV();
+    float3 normal = input.getNormal();
+    
+    // TODO Shading
+    // Local -> View space
+    
+    position.x += 1.0f;
+
+    Vertex output;
+    output.setVertex(position, normal, uv);
+    g_VertexCache[g_InstanceData.vertexOffset + did] = output;
+}
