@@ -1,6 +1,7 @@
 #include "shared.h"
+#include "math/transform.hlsl"
 
-ConstantBuffer<Constants> g_Constants;
+ConstantBuffer<VertexShadingConstants> g_Constants;
 ConstantBuffer<InstanceData> g_InstanceData;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Vertex> g_InputVertices;
@@ -25,10 +26,14 @@ void main(uint did : SV_DispatchThreadID)
     float2 uv = input.getUV();
     float3 normal = input.getNormal();
     
-    // TODO Shading
-    // Local -> View space
-    
-    position.x += 1.0f;
+    // TODO is there something wrong with the matrices?
+    float3x4 modelMatrix = g_TransformBuffer[instance.transform_index];
+    // View space position.
+    position = transformPoint(position, modelMatrix);
+    position = transformPoint(position, g_Constants.view);
+    // View space normal.
+    normal = transformNormal(normal, modelMatrix);
+    normal = transformNormal(normal, g_Constants.view);
 
     Vertex output;
     output.setVertex(position, normal, uv);

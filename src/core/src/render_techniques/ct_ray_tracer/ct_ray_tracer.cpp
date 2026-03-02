@@ -45,7 +45,7 @@ ComponentList CtRayTracer::getComponents() const noexcept
 SharedTextureList CtRayTracer::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::Write});
+    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
     return textures;
 }
 
@@ -76,59 +76,100 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
     std::vector<uint32_t> vertexCacheOffset;
     uint32_t              currentVertexCacheOffset = 0u;
 
-    const auto& gpuDrawConstants = capsaicin.allocateConstantBuffer<Constants>(1);
+    // Vertices shading.
     {
-        Constants drawConstants = {};
-        drawConstants.view      = capsaicin.getCameraMatrices().view;
+        const auto& gpuVertexShadingConstants = capsaicin.allocateConstantBuffer<VertexShadingConstants>(1);
+        {
+            VertexShadingConstants drawConstants = {};
+            drawConstants.view                   = capsaicin.getCameraMatrices().view;
 
-        gfxBufferGetData<Constants>(gfx_, gpuDrawConstants)[0] = drawConstants;
+            gfxBufferGetData<VertexShadingConstants>(gfx_, gpuVertexShadingConstants)[0] = drawConstants;
+        }
+
+        const auto     scene        = capsaicin.getScene();
+        const uint32_t numInstances = gfxSceneGetInstanceCount(scene);
+        const auto*    instances    = gfxSceneGetInstances(scene);
+
+        // Properly resize the cache offsets.
+        vertexCacheOffset.resize(numInstances);
+
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_Constants", gpuVertexShadingConstants);
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexCache", m_vertexCache);
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InputVertices", capsaicin.getVertexBuffer());
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
+        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
+        gfxCommandBindKernel(gfx_, m_shadeVerticesKernel);
+        const uint32_t* groupSize = gfxKernelGetNumThreads(gfx_, m_shadeVerticesKernel);
+
+        for (uint32_t instanceId = 0u; instanceId < numInstances; ++instanceId)
+        {
+            const auto instance = instances[instanceId];
+            const auto meshInfo = capsaicin.getMeshInfo(static_cast<uint32_t>(instance.mesh));
+
+            InstanceData instanceData = {};
+            instanceData.instanceId   = instanceId;
+            instanceData.vertexOffset = currentVertexCacheOffset;
+            instanceData.numVertices  = meshInfo.vertex_count;
+            // TODO I can allocate one big buffer and then just set instance id on each iteration.
+            // will it be more performant?
+            const auto& gpuInstanceData = capsaicin.allocateConstantBuffer<InstanceData>(1);
+            gfxBufferGetData<InstanceData>(gfx_, gpuInstanceData)[0] = instanceData;
+
+            gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InstanceData", gpuInstanceData);
+
+            const uint32_t groupCount = (meshInfo.vertex_count + groupSize[0] - 1u) / groupSize[0];
+            gfxCommandDispatch(gfx_, groupCount, 1, 1);
+            gfxDestroyBuffer(gfx_, gpuInstanceData);
+
+            // Track these numbers here to pass it to the RT pass.
+            vertexCacheOffset[instanceId] = currentVertexCacheOffset;
+            currentVertexCacheOffset += meshInfo.vertex_count;
+        }
+        gfxDestroyBuffer(gfx_, gpuVertexShadingConstants);
     }
 
-    const auto     scene        = capsaicin.getScene();
-    const uint32_t numInstances = gfxSceneGetInstanceCount(scene);
-    const auto*    instances    = gfxSceneGetInstances(scene);
-
-    vertexCacheOffset.resize(numInstances);
-
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_Constants", gpuDrawConstants);
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexCache", m_vertexCache);
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InputVertices", capsaicin.getVertexBuffer());
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
-    gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
-    gfxCommandBindKernel(gfx_, m_shadeVerticesKernel);
-    const uint32_t* groupSize = gfxKernelGetNumThreads(gfx_, m_shadeVerticesKernel);
-
-    for (uint32_t instanceId = 0u; instanceId < numInstances; ++instanceId)
+    // RT pass.
     {
-        const auto instance = instances[instanceId];
-        const auto meshInfo = capsaicin.getMeshInfo(static_cast<uint32_t>(instance.mesh));
+        const auto& colorTexture   = capsaicin.getSharedTexture("Color");
+        const auto& gpuRtConstants = capsaicin.allocateConstantBuffer<RtConstants>(1);
+        {
+            RtConstants drawConstants   = {};
+            drawConstants.numInstances  = currentVertexCacheOffset;
+            drawConstants.resolution    = {colorTexture.getWidth(), colorTexture.getHeight()};
+            drawConstants.invResolution = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
 
-        InstanceData instanceData = {};
-        instanceData.instanceId   = instanceId;
-        instanceData.vertexOffset = currentVertexCacheOffset;
-        instanceData.numVertices  = meshInfo.vertex_count;
-        // TODO I can allocate one big buffer and then just set instance id on each iteration.
-        // will it be more performant?
-        const auto& gpuInstanceData = capsaicin.allocateConstantBuffer<InstanceData>(1);
-        gfxBufferGetData<InstanceData>(gfx_, gpuInstanceData)[0] = instanceData;
+            gfxBufferGetData<RtConstants>(gfx_, gpuRtConstants)[0] = drawConstants;
+        }
 
-        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InstanceData", gpuInstanceData);
+        const auto& gpuVertexCacheOffset = gfxCreateBuffer<uint32_t>(
+            gfx_, static_cast<uint32_t>(vertexCacheOffset.size()), vertexCacheOffset.data());
 
-        const uint32_t groupCount = (meshInfo.vertex_count + groupSize[0] - 1u) / groupSize[0];
-        gfxCommandDispatch(gfx_, groupCount, 1, 1);
-        gfxDestroyBuffer(gfx_, gpuInstanceData);
+        {
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_Constants", gpuRtConstants);
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_VertexCache", m_vertexCache);
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_IndexBuffer", capsaicin.getIndexBuffer());
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_VertexOffsetBuffer", gpuVertexCacheOffset);
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_Output", capsaicin.getSharedTexture("Color"));
 
-        vertexCacheOffset[instanceId] = currentVertexCacheOffset;
-        currentVertexCacheOffset += meshInfo.vertex_count;
+            gfxCommandBindKernel(gfx_, m_rtKernel);
+            const uint32_t*  groupSize  = gfxKernelGetNumThreads(gfx_, m_rtKernel);
+            const glm::uvec2 groupCount = {(colorTexture.getWidth() + groupSize[0] - 1u) / groupSize[0],
+                (colorTexture.getHeight() + groupSize[1] - 1u) / groupSize[1]};
+            gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1u);
+        }
+
+        gfxDestroyBuffer(gfx_, gpuVertexCacheOffset);
+        gfxDestroyBuffer(gfx_, gpuRtConstants);
     }
-
-    gfxDestroyBuffer(gfx_, gpuDrawConstants);
 }
 
 void CtRayTracer::terminate() noexcept
 {
     // TODO remove members
+    gfxDestroyBuffer(gfx_, m_vertexCache);
+    m_vertexCache = {};
 }
 
 void CtRayTracer::renderGUI([[maybe_unused]] CapsaicinInternal& capsaicin) const noexcept {}

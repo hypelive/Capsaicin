@@ -1,5 +1,62 @@
+#include "shared.h"
+
+ConstantBuffer<RtConstants> g_Constants;
+StructuredBuffer<Instance> g_InstanceBuffer;
+StructuredBuffer<uint> g_IndexBuffer;
+StructuredBuffer<uint> g_VertexOffsetBuffer;
+StructuredBuffer<ShadedVertex> g_VertexCache;
+
+RWTexture2D<float4> g_Output;
+
 [numthreads(8, 4, 1)]
 void main(in uint2 did : SV_DispatchThreadID)
 {
+    if (any(did >= g_Constants.resolution))
+    {
+        return;
+    }
     
+    CtRayGenerator rayGenerator;
+    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(1.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f));
+
+    float2 uv = g_Constants.invResolution * did;
+    CtRay ray = rayGenerator.generateRay(uv);
+    
+    for (uint instanceId = 0; instanceId < g_Constants.numInstances; ++instanceId)
+    {
+        Instance instance = g_InstanceBuffer[instanceId];
+        uint globalVertexOffset = g_VertexOffsetBuffer[instanceId];
+        
+        for (uint index = 0; index < instance.index_count; index += 3)
+        {
+            uint i0 = g_IndexBuffer[index + 0];
+            uint i1 = g_IndexBuffer[index + 1];
+            uint i2 = g_IndexBuffer[index + 2];
+            
+            float3 v0 = g_VertexCache[i0 + globalVertexOffset].getPosition();
+            float3 v1 = g_VertexCache[i1 + globalVertexOffset].getPosition();
+            float3 v2 = g_VertexCache[i2 + globalVertexOffset].getPosition();
+            
+            float3 e0 = v1 - v0;
+            float3 e1 = v2 - v1;
+            float3 e2 = v0 - v2;
+            float3 n = normalize(cross(e0, -e2));
+
+            // Find the ray plane intersection.
+            float t = dot(n, v0 - ray.o) / dot(n, ray.d);
+            float3 p = ray.o + ray.d * t;
+            // Check if this is inside the triangle.
+            const float a = dot(n, cross(e0, p - v0));
+            const float b = dot(n, cross(e1, p - v1));
+            const float c = dot(n, cross(e2, p - v2));
+            if (a < 0.0f || b < 0.0f || c < 0.0f)
+                continue;
+            
+            // The intersection is found!
+            g_Output[did] = float4(1.0f, 1.0f, 1.0f, 1.0f);
+            return;
+        }
+    }
+
+    g_Output[did] = float4(0.0f, 0.0f, 0.0f, 1.0f);
 }
