@@ -71,9 +71,15 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
         m_vertexCache.setName("Vertex Cache");
     }
 
+    const auto     scene        = capsaicin.getScene();
+    const uint32_t numInstances = gfxSceneGetInstanceCount(scene);
+    const auto*    instances    = gfxSceneGetInstances(scene);
+
     // Per instance offset to the vertex cache data.
     // It's needed for triangles traversing in the RT shader.
     std::vector<uint32_t> vertexCacheOffset;
+    // Properly resize the cache offsets.
+    vertexCacheOffset.resize(numInstances);
     uint32_t              currentVertexCacheOffset = 0u;
 
     // Vertices shading.
@@ -85,13 +91,6 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
 
             gfxBufferGetData<VertexShadingConstants>(gfx_, gpuVertexShadingConstants)[0] = drawConstants;
         }
-
-        const auto     scene        = capsaicin.getScene();
-        const uint32_t numInstances = gfxSceneGetInstanceCount(scene);
-        const auto*    instances    = gfxSceneGetInstances(scene);
-
-        // Properly resize the cache offsets.
-        vertexCacheOffset.resize(numInstances);
 
         gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_Constants", gpuVertexShadingConstants);
         gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexCache", m_vertexCache);
@@ -135,7 +134,7 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
         const auto& gpuRtConstants = capsaicin.allocateConstantBuffer<RtConstants>(1);
         {
             RtConstants drawConstants   = {};
-            drawConstants.numInstances  = currentVertexCacheOffset;
+            drawConstants.numInstances  = numInstances;
             drawConstants.resolution    = {colorTexture.getWidth(), colorTexture.getHeight()};
             drawConstants.invResolution = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
 

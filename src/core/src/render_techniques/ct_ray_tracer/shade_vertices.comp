@@ -14,7 +14,7 @@ uint g_VertexDataIndex;
 [numthreads(64, 1, 1)]
 void main(uint did : SV_DispatchThreadID)
 {
-    if (did > g_InstanceData.numVertices)
+    if (did >= g_InstanceData.numVertices)
     {
         return;
     }
@@ -30,10 +30,10 @@ void main(uint did : SV_DispatchThreadID)
     float3x4 modelMatrix = g_TransformBuffer[instance.transform_index];
     // View space position.
     position = transformPoint(position, modelMatrix);
-    position = transformPoint(position, g_Constants.view);
+    position = transformPoint(position, (float3x4)g_Constants.view);
     // View space normal.
     normal = transformNormal(normal, modelMatrix);
-    normal = transformNormal(normal, g_Constants.view);
+    normal = transformNormal(normal, (float3x4)g_Constants.view);
 
     Vertex output;
     output.setVertex(position, normal, uv);

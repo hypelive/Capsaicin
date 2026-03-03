@@ -8,6 +8,22 @@ StructuredBuffer<ShadedVertex> g_VertexCache;
 
 RWTexture2D<float4> g_Output;
 
+static const float3 g_IndexToColor[9] =
+{
+    float3(1.0, 0.0, 0.0), // 0 - Red
+    float3(0.0, 1.0, 0.0), // 1 - Green
+    float3(0.0, 0.0, 1.0), // 2 - Blue
+    float3(1.0, 1.0, 0.0), // 3 - Yellow
+    float3(1.0, 0.0, 1.0), // 4 - Magenta
+    float3(0.0, 1.0, 1.0), // 5 - Cyan
+    float3(1.0, 0.5, 0.0), // 6 - Orange
+    float3(0.5, 0.0, 1.0), // 7 - Purple
+    float3(0.5, 0.5, 0.5) // 8 - Gray
+};
+
+static const float T_MIN = 0.01f;
+static const float T_MAX = 100000.0f;
+
 [numthreads(8, 4, 1)]
 void main(in uint2 did : SV_DispatchThreadID)
 {
@@ -17,9 +33,10 @@ void main(in uint2 did : SV_DispatchThreadID)
     }
     
     CtRayGenerator rayGenerator;
-    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(1.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f));
+    // Camera is at the origin in the view space.
+    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.0f, 0.0f), float3(0.0f, 0.1f, 0.0f));
 
-    float2 uv = g_Constants.invResolution * did;
+    float2 uv = g_Constants.invResolution * (did + 0.5f);
     CtRay ray = rayGenerator.generateRay(uv);
     
     for (uint instanceId = 0; instanceId < g_Constants.numInstances; ++instanceId)
@@ -29,9 +46,9 @@ void main(in uint2 did : SV_DispatchThreadID)
         
         for (uint index = 0; index < instance.index_count; index += 3)
         {
-            uint i0 = g_IndexBuffer[index + 0];
-            uint i1 = g_IndexBuffer[index + 1];
-            uint i2 = g_IndexBuffer[index + 2];
+            uint i0 = g_IndexBuffer[instance.index_offset_idx + index + 0];
+            uint i1 = g_IndexBuffer[instance.index_offset_idx + index + 1];
+            uint i2 = g_IndexBuffer[instance.index_offset_idx + index + 2];
             
             float3 v0 = g_VertexCache[i0 + globalVertexOffset].getPosition();
             float3 v1 = g_VertexCache[i1 + globalVertexOffset].getPosition();
@@ -44,17 +61,19 @@ void main(in uint2 did : SV_DispatchThreadID)
 
             // Find the ray plane intersection.
             float t = dot(n, v0 - ray.o) / dot(n, ray.d);
-            float3 p = ray.o + ray.d * t;
-            // Check if this is inside the triangle.
-            const float a = dot(n, cross(e0, p - v0));
-            const float b = dot(n, cross(e1, p - v1));
-            const float c = dot(n, cross(e2, p - v2));
-            if (a < 0.0f || b < 0.0f || c < 0.0f)
-                continue;
-            
-            // The intersection is found!
-            g_Output[did] = float4(1.0f, 1.0f, 1.0f, 1.0f);
-            return;
+            if (t >= T_MIN && t <= T_MAX)
+            {
+                float3 p = ray.o + ray.d * t;
+                // Check if this is inside the triangle.
+                const float a = dot(n, cross(e0, p - v0));
+                const float b = dot(n, cross(e1, p - v1));
+                const float c = dot(n, cross(e2, p - v2));
+                if (a < 0.0f || b < 0.0f || c < 0.0f)
+                    continue;
+                
+                g_Output[did] = float4(g_IndexToColor[index % 9], 1.0f);
+                return;
+            }
         }
     }
 

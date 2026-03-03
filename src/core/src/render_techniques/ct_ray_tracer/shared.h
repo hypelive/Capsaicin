@@ -15,11 +15,12 @@ struct InstanceData
     uint instanceId;
     uint vertexOffset;
     uint numVertices;
+    uint padding;
 };
 
 struct VertexShadingConstants
 {
-    float3x4 view;
+    float4x4 view;
 };
 
 struct RtConstants
@@ -57,7 +58,7 @@ struct CtRayGenerator
     CtRay generateRay(float2 uv)
     {
         float3 from    = m_origin;
-        float3 forward = normalize(cross(m_up, m_right));
+        float3 forward = normalize(cross(m_right, m_up));
         float3 to      = m_origin + forward + lerp(-m_right, m_right, uv.x) + lerp(m_up, -m_up, uv.y);
 
         CtRay ray;

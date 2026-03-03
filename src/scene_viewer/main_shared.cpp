@@ -92,6 +92,9 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     { .name                 = "Icosphere1",
      .fileName          = {"assets/Custom/Icosphere/Icosphere1.glb"},
      .useEnvironmentMap = true},
+    { .name                 = "Plane",
+     .fileName          = {"assets/Custom/Plane/Plane.glb"},
+     .useEnvironmentMap = true},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {
