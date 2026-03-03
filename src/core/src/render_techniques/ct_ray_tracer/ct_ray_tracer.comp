@@ -34,7 +34,7 @@ void main(in uint2 did : SV_DispatchThreadID)
     
     CtRayGenerator rayGenerator;
     // Camera is at the origin in the view space.
-    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.0f, 0.0f), float3(0.0f, 0.1f, 0.0f));
+    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.5f, 0.0f, 0.0f), float3(0.0f, 0.5f, 0.0f));
 
     float2 uv = g_Constants.invResolution * (did + 0.5f);
     CtRay ray = rayGenerator.generateRay(uv);
@@ -71,7 +71,7 @@ void main(in uint2 did : SV_DispatchThreadID)
                 if (a < 0.0f || b < 0.0f || c < 0.0f)
                     continue;
                 
-                g_Output[did] = float4(g_IndexToColor[index % 9], 1.0f);
+                g_Output[did] = float4(g_IndexToColor[(index / 3) % 9], 1.0f);
                 return;
             }
         }

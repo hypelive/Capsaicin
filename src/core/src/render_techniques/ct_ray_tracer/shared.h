@@ -18,6 +18,7 @@ struct InstanceData
     uint padding;
 };
 
+// TODO For some reason the float3x4 is defined as 4x3 matrix on CPU. It leads to artifacts.
 struct VertexShadingConstants
 {
     float4x4 view;
@@ -58,7 +59,7 @@ struct CtRayGenerator
     CtRay generateRay(float2 uv)
     {
         float3 from    = m_origin;
-        float3 forward = normalize(cross(m_right, m_up));
+        float3 forward = normalize(cross(m_up, m_right));
         float3 to      = m_origin + forward + lerp(-m_right, m_right, uv.x) + lerp(m_up, -m_up, uv.y);
 
         CtRay ray;
