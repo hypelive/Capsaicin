@@ -45,7 +45,7 @@ ComponentList CtRayTracer::getComponents() const noexcept
 SharedTextureList CtRayTracer::getSharedTextures() const noexcept
 {
     SharedTextureList textures;
-    textures.push_back({"Color", SharedTexture::Access::ReadWrite});
+    textures.push_back({"Color", SharedTexture::Access::ReadWrite, SharedTexture::Flags::Clear});
     return textures;
 }
 
@@ -150,6 +150,7 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_IndexBuffer", capsaicin.getIndexBuffer());
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_VertexOffsetBuffer", gpuVertexCacheOffset);
+            gfxProgramSetParameter(gfx_, m_rtProgram, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_Output", capsaicin.getSharedTexture("Color"));
 
             gfxCommandBindKernel(gfx_, m_rtKernel);
