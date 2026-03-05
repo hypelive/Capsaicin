@@ -23,8 +23,19 @@ public:
      */
     RenderOptionList getRenderOptions() noexcept override;
 
+    enum class DebugMode : uint32_t
+    {
+        None = 0,
+        TriangleIndex,
+        InstanceIndex,
+
+        Count
+    };
+
     struct RenderOptions
-    {};
+    {
+        uint32_t debugMode = 0u;
+    };
 
     /**
      * Convert render options to internal options format.
@@ -77,7 +88,7 @@ protected:
     GfxProgram m_shadeVerticesProgram;
     GfxKernel m_shadeVerticesKernel;
     GfxProgram m_rtProgram;
-    GfxKernel m_rtKernel;
+    std::array<GfxKernel, static_cast<uint32_t>(DebugMode::Count)> m_rtKernels;
 
     GfxBuffer m_vertexCache;
 };

@@ -1,5 +1,10 @@
 #include "shared.h"
 
+#ifndef DEBUG_MODE
+// Regular ray tracing
+#define DEBUG_MODE 0
+#endif
+
 ConstantBuffer<RtConstants> g_Constants;
 StructuredBuffer<Instance> g_InstanceBuffer;
 StructuredBuffer<Material> g_MaterialBuffer;
@@ -43,6 +48,11 @@ void main(in uint2 did : SV_DispatchThreadID)
     
     float tMin = T_MAX + EPS;
     Instance intersectionInstance;
+#if DEBUG_MODE == 1
+    uint triangleIndex = 0u;
+#elif DEBUG_MODE == 2
+    uint instanceIndex = 0u;
+#endif
     
     for (uint instanceId = 0; instanceId < g_Constants.numInstances; ++instanceId)
     {
@@ -87,13 +97,24 @@ void main(in uint2 did : SV_DispatchThreadID)
                 
             tMin = t;
             intersectionInstance = instance;
+#if DEBUG_MODE == 1
+            triangleIndex = index / 3;
+#elif DEBUG_MODE == 2
+            instanceIndex = instanceId;
+#endif
         }
     }
     
     if (tMin < T_MAX)
     {
         Material material = g_MaterialBuffer[intersectionInstance.material_index];
+#if DEBUG_MODE == 0
         g_Output[did] = float4(material.albedo.xyz, 1.0f);
+#elif DEBUG_MODE == 1
+        g_Output[did] = float4(g_IndexToColor[triangleIndex % 8], 1.0f);
+#elif DEBUG_MODE == 2
+        g_Output[did] = float4(g_IndexToColor[instanceIndex % 8], 1.0f);
+#endif
     }
 
 }

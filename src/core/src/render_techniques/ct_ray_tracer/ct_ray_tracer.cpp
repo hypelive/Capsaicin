@@ -26,6 +26,7 @@ CtRayTracer::~CtRayTracer()
 RenderOptionList CtRayTracer::getRenderOptions() noexcept
 {
     RenderOptionList newOptions;
+    newOptions.emplace(RENDER_OPTION_MAKE(debugMode, options));
     return newOptions;
 }
 
@@ -33,6 +34,7 @@ CtRayTracer::RenderOptions CtRayTracer::convertOptions(
     [[maybe_unused]] const RenderOptionList& options) noexcept
 {
     RenderOptions newOptions;
+    RENDER_OPTION_GET(debugMode, newOptions, options)
     return newOptions;
 }
 
@@ -55,14 +57,21 @@ bool CtRayTracer::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noex
     m_shadeVerticesKernel  = gfxCreateComputeKernel(gfx_, m_shadeVerticesProgram);
 
     m_rtProgram = capsaicin.createProgram(RT_PROGRAM_NAME.data());
-    m_rtKernel  = gfxCreateComputeKernel(gfx_, m_rtProgram);
+    for (uint32_t debugModeIndex = 0u; debugModeIndex < static_cast<uint32_t>(DebugMode::Count);
+        ++debugModeIndex)
+    {
+        std::string debugModeDefine = std::format("DEBUG_MODE={}", debugModeIndex);
+        const char* defines[1]      = {debugModeDefine.data()};
+        m_rtKernels[debugModeIndex] = gfxCreateComputeKernel(gfx_, m_rtProgram, nullptr, defines, 1u);
+    }
 
-    return m_shadeVerticesKernel && m_rtKernel;
+    return m_shadeVerticesKernel && m_rtKernels[0];
 }
 
 void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
 {
     [[maybe_unused]] const RenderOptions newOptions = convertOptions(capsaicin.getOptions());
+    uint32_t debugModeIndex = glm::clamp(newOptions.debugMode, 0u, static_cast<uint32_t>(DebugMode::Count) - 1);
 
     if (!m_vertexCache)
     {
@@ -80,7 +89,7 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
     std::vector<uint32_t> vertexCacheOffset;
     // Properly resize the cache offsets.
     vertexCacheOffset.resize(numInstances);
-    uint32_t              currentVertexCacheOffset = 0u;
+    uint32_t currentVertexCacheOffset = 0u;
 
     // Vertices shading.
     {
@@ -95,9 +104,12 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
         gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_Constants", gpuVertexShadingConstants);
         gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexCache", m_vertexCache);
         gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InputVertices", capsaicin.getVertexBuffer());
-        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
-        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
-        gfxProgramSetParameter(gfx_, m_shadeVerticesProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
+        gfxProgramSetParameter(
+            gfx_, m_shadeVerticesProgram, "g_TransformBuffer", capsaicin.getTransformBuffer());
+        gfxProgramSetParameter(
+            gfx_, m_shadeVerticesProgram, "g_InstanceBuffer", capsaicin.getInstanceBuffer());
+        gfxProgramSetParameter(
+            gfx_, m_shadeVerticesProgram, "g_VertexDataIndex", capsaicin.getVertexDataIndex());
         gfxCommandBindKernel(gfx_, m_shadeVerticesKernel);
         const uint32_t* groupSize = gfxKernelGetNumThreads(gfx_, m_shadeVerticesKernel);
 
@@ -153,8 +165,8 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_MaterialBuffer", capsaicin.getMaterialBuffer());
             gfxProgramSetParameter(gfx_, m_rtProgram, "g_Output", capsaicin.getSharedTexture("Color"));
 
-            gfxCommandBindKernel(gfx_, m_rtKernel);
-            const uint32_t*  groupSize  = gfxKernelGetNumThreads(gfx_, m_rtKernel);
+            gfxCommandBindKernel(gfx_, m_rtKernels[debugModeIndex]);
+            const uint32_t*  groupSize  = gfxKernelGetNumThreads(gfx_, m_rtKernels[debugModeIndex]);
             const glm::uvec2 groupCount = {(colorTexture.getWidth() + groupSize[0] - 1u) / groupSize[0],
                 (colorTexture.getHeight() + groupSize[1] - 1u) / groupSize[1]};
             gfxCommandDispatch(gfx_, groupCount.x, groupCount.y, 1u);
