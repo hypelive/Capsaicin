@@ -95,6 +95,9 @@ vector<CapsaicinMain::SceneData> const CapsaicinMain::scenes = {
     { .name                 = "Plane",
      .fileName          = {"assets/Custom/Plane/Plane.glb"},
      .useEnvironmentMap = true},
+    { .name                 = "CornellBox",
+     .fileName          = {"assets/Custom/CornellBox/CornellBox.obj"},
+     .useEnvironmentMap = true},
 };
 
 vector<pair<string_view, filesystem::path>> const CapsaicinMain::sceneEnvironmentMaps = {

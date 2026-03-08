@@ -1,4 +1,5 @@
 #include "shared.h"
+#include "math/math.hlsl"
 
 #ifndef DEBUG_MODE
 // Regular ray tracing
@@ -14,6 +15,13 @@ StructuredBuffer<ShadedVertex> g_VertexCache;
 
 RWTexture2D<float4> g_Output;
 
+struct TriangleVertices
+{
+    ShadedVertex v0;
+    ShadedVertex v1;
+    ShadedVertex v2;
+};
+
 static const float3 g_IndexToColor[8] =
 {
     float3(1.0, 0.0, 0.0), // 0 - Red
@@ -27,9 +35,51 @@ static const float3 g_IndexToColor[8] =
 };
 
 static const float T_MIN = 0.01f;
-static const float T_MAX = 100000.0f;
+static const float T_MAX = 1000.0f;
 static const float EPS = 1e-5f;
 static const float ASPECT_RATIO = 16.0f / 9.0f;
+
+// TODO make sort of a library with that.
+float3 getBarycentrics(CtRay ray, float3 v0, float3 v1, float3 v2)
+{
+    // Möller–Trumbore intersection algorithm.
+    // https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
+    float3 edge10 = v1 - v0;
+    float3 edge20 = v2 - v0;
+
+    float3 DcrossE20 = cross(ray.d, edge20);
+    float det = dot(DcrossE20, edge10);
+    if (abs(det) < FLT_EPSILON)
+    {
+        return 0.0f; // Almost parallel.
+    }
+
+    float invDet = rcp(det);
+    float3 s = ray.o - v0;
+    float u = invDet * dot(s, DcrossE20);
+
+    float3 ScrossE10 = cross(s, edge10);
+    float v = invDet * dot(ray.d, ScrossE10);
+
+    return float3(1.0f - u - v, u, v);
+}
+
+float3 interpolate(float3 barycentrics, float3 value0, float3 value1, float3 value2)
+{
+    return barycentrics.x * value0 + barycentrics.y * value1 + barycentrics.z * value2;
+}
+
+ShadedVertex getInterpolatedVertex(float3 barycentrics, ShadedVertex v0, ShadedVertex v1, ShadedVertex v2)
+{
+    float3 position = interpolate(barycentrics, v0.getPosition(), v1.getPosition(), v2.getPosition());
+    float3 normal = normalize(interpolate(barycentrics, v0.getNormal(), v1.getNormal(), v2.getNormal()));
+    float2 uv = barycentrics.x * v0.getUV() + barycentrics.y * v1.getUV() + barycentrics.z * v2.getUV();
+    
+    ShadedVertex result;
+    result.setVertex(position, normal, uv);
+    
+    return result;
+}
 
 [numthreads(8, 4, 1)]
 void main(in uint2 did : SV_DispatchThreadID)
@@ -39,15 +89,17 @@ void main(in uint2 did : SV_DispatchThreadID)
         return;
     }
     
-    CtRayGenerator rayGenerator;
+    CtLensDistortionRayGenerator rayGenerator;
+    rayGenerator.m_distortion = g_Constants.lensDistortion;
     // Camera is at the origin in the view space.
     rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.5f * ASPECT_RATIO, 0.0f, 0.0f), float3(0.0f, 0.5f, 0.0f));
 
-    float2 uv = g_Constants.invResolution * (did + 0.5f);
-    CtRay ray = rayGenerator.generateRay(uv);
+    float2 screenUv = g_Constants.invResolution * (did + 0.5f);
+    CtRay ray = rayGenerator.generateRay(screenUv);
     
     float tMin = T_MAX + EPS;
     Instance intersectionInstance;
+    ShadedVertex interpolatedAttributes;
 #if DEBUG_MODE == 1
     uint triangleIndex = 0u;
 #elif DEBUG_MODE == 2
@@ -65,9 +117,14 @@ void main(in uint2 did : SV_DispatchThreadID)
             uint i1 = g_IndexBuffer[instance.index_offset_idx + index + 1];
             uint i2 = g_IndexBuffer[instance.index_offset_idx + index + 2];
             
-            float3 v0 = g_VertexCache[i0 + globalVertexOffset].getPosition();
-            float3 v1 = g_VertexCache[i1 + globalVertexOffset].getPosition();
-            float3 v2 = g_VertexCache[i2 + globalVertexOffset].getPosition();
+            TriangleVertices currentVertices;
+            currentVertices.v0 = g_VertexCache[i0 + globalVertexOffset];
+            currentVertices.v1 = g_VertexCache[i1 + globalVertexOffset];
+            currentVertices.v2 = g_VertexCache[i2 + globalVertexOffset];
+            
+            float3 v0 = currentVertices.v0.getPosition();
+            float3 v1 = currentVertices.v1.getPosition();
+            float3 v2 = currentVertices.v2.getPosition();
             
             float3 e0 = v1 - v0;
             float3 e1 = v2 - v1;
@@ -76,6 +133,11 @@ void main(in uint2 did : SV_DispatchThreadID)
 
             // TODO support Moller Trombone algorithm to calculate baricentric coordinates to allow for vertices blenging and texturing.
             // Find the ray plane intersection.
+            float NdotRD = dot(n, ray.d);
+            if (abs(NdotRD) < FLT_EPSILON)
+            {
+                continue;
+            }
             float t = dot(n, v0 - ray.o) / dot(n, ray.d);
             if (t < T_MIN || t > T_MAX)
             {
@@ -94,9 +156,19 @@ void main(in uint2 did : SV_DispatchThreadID)
             const float c = dot(n, cross(e2, p - v2));
             if (a < 0.0f || b < 0.0f || c < 0.0f)
                 continue;
-                
+            
+            float area = a + b + c;
+            float3 barycentrics = float3(a / area, b / area, c / area);
+            
             tMin = t;
             intersectionInstance = instance;
+            // Can be done once in the end. Does that make sense?
+            interpolatedAttributes = getInterpolatedVertex(barycentrics, currentVertices.v0, currentVertices.v1, currentVertices.v2);
+            if (all(currentVertices.v0.getNormal()) < FLT_EPSILON)
+            {
+                // Replace to the geometry normal.
+                interpolatedAttributes.normal_uvy.xyz = n;
+            }
 #if DEBUG_MODE == 1
             triangleIndex = index / 3;
 #elif DEBUG_MODE == 2
@@ -105,16 +177,36 @@ void main(in uint2 did : SV_DispatchThreadID)
         }
     }
     
+    // TODO add env map on miss.
     if (tMin < T_MAX)
     {
+        // TODO support texturing.
         Material material = g_MaterialBuffer[intersectionInstance.material_index];
-#if DEBUG_MODE == 0
-        g_Output[did] = float4(material.albedo.xyz, 1.0f);
-#elif DEBUG_MODE == 1
-        g_Output[did] = float4(g_IndexToColor[triangleIndex % 8], 1.0f);
-#elif DEBUG_MODE == 2
-        g_Output[did] = float4(g_IndexToColor[instanceIndex % 8], 1.0f);
+        float3 albedo = material.albedo.xyz;
+        float3 emissivity = material.emissivity.xyz;
+        float metallicity = material.metallicity_roughness.x;
+        float roughness = material.metallicity_roughness.z;
+        float3 normal = interpolatedAttributes.getNormal();
+        float2 uv = interpolatedAttributes.getUV();
+        
+        float NdotV = max(0.0f, dot(normal, -ray.d));
+        
+        float3 result;
+#if DEBUG_MODE == 0 // Path tracing
+        result = albedo * NdotV + emissivity;
+#elif DEBUG_MODE == 1 // Triangle index
+        result = g_IndexToColor[triangleIndex % 8];
+#elif DEBUG_MODE == 2 // Instance index
+        result = g_IndexToColor[instanceIndex % 8];
+#elif DEBUG_MODE == 3 // Normal
+        result = normal;
+#elif DEBUG_MODE == 4 // UV
+        result = float3(uv, 0.0f);
+#elif DEBUG_MODE == 5 // Depth
+        result = pow(tMin / T_MAX, 0.2f);
 #endif
+        g_Output[did] = float4(result, 1.0f);
+
     }
 
 }

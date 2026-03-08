@@ -175,7 +175,7 @@ protected:
      */
     static void fileDropCallback(char const *filePath, uint32_t index, void *data) noexcept;
 
-    static constexpr auto defaultScene          = "Plane";
+    static constexpr auto defaultScene          = "CornellBox";
     static constexpr auto defaultEnvironmentMap = "Kiara Dawn";
     static constexpr auto defaultRenderer       = "Custom RT Renderer";
 

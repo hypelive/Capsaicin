@@ -27,6 +27,7 @@ RenderOptionList CtRayTracer::getRenderOptions() noexcept
 {
     RenderOptionList newOptions;
     newOptions.emplace(RENDER_OPTION_MAKE(debugMode, options));
+    newOptions.emplace(RENDER_OPTION_MAKE(lensDistortion, options));
     return newOptions;
 }
 
@@ -35,6 +36,7 @@ CtRayTracer::RenderOptions CtRayTracer::convertOptions(
 {
     RenderOptions newOptions;
     RENDER_OPTION_GET(debugMode, newOptions, options)
+    RENDER_OPTION_GET(lensDistortion, newOptions, options)
     return newOptions;
 }
 
@@ -149,6 +151,7 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
             drawConstants.numInstances  = numInstances;
             drawConstants.resolution    = {colorTexture.getWidth(), colorTexture.getHeight()};
             drawConstants.invResolution = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
+            drawConstants.lensDistortion = newOptions.lensDistortion;
 
             gfxBufferGetData<RtConstants>(gfx_, gpuRtConstants)[0] = drawConstants;
         }

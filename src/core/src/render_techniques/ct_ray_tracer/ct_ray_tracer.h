@@ -28,6 +28,9 @@ public:
         None = 0,
         TriangleIndex,
         InstanceIndex,
+        Normal,
+        UV,
+        Depth,
 
         Count
     };
@@ -35,6 +38,7 @@ public:
     struct RenderOptions
     {
         uint32_t debugMode = 0u;
+        float    lensDistortion = -0.1f;
     };
 
     /**
