@@ -30,6 +30,7 @@ struct RtConstants
     float2 invResolution;
     uint   numInstances;
     float  lensDistortion;
+    uint   frameIndex;
 };
 
 // TODO Move to some header?

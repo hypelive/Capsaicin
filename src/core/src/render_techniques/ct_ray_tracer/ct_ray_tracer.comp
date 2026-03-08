@@ -1,5 +1,6 @@
 #include "shared.h"
 #include "math/math.hlsl"
+#include "math/sampling.hlsl"
 
 #ifndef DEBUG_MODE
 // Regular ray tracing
@@ -22,6 +23,23 @@ struct TriangleVertices
     ShadedVertex v2;
 };
 
+struct HitInfo
+{
+    float t;
+    Instance intersectionInstance;
+    ShadedVertex interpolatedAttributes;
+#if DEBUG_MODE == 1
+    uint triangleIndex;
+#elif DEBUG_MODE == 2
+    uint instanceIndex;
+#endif
+};
+
+static const float T_MIN = 0.01f;
+static const float T_MAX = 1000.0f;
+static const float EPS = 1e-5f;
+static const float ASPECT_RATIO = 16.0f / 9.0f;
+
 static const float3 g_IndexToColor[8] =
 {
     float3(1.0, 0.0, 0.0), // 0 - Red
@@ -33,11 +51,6 @@ static const float3 g_IndexToColor[8] =
     float3(1.0, 0.5, 0.0), // 6 - Orange
     float3(0.5, 0.0, 1.0), // 7 - Purple
 };
-
-static const float T_MIN = 0.01f;
-static const float T_MAX = 1000.0f;
-static const float EPS = 1e-5f;
-static const float ASPECT_RATIO = 16.0f / 9.0f;
 
 // TODO make sort of a library with that.
 float3 getBarycentrics(CtRay ray, float3 v0, float3 v1, float3 v2)
@@ -81,30 +94,10 @@ ShadedVertex getInterpolatedVertex(float3 barycentrics, ShadedVertex v0, ShadedV
     return result;
 }
 
-[numthreads(8, 4, 1)]
-void main(in uint2 did : SV_DispatchThreadID)
+HitInfo dispatchRay(CtRay ray)
 {
-    if (any(did >= g_Constants.resolution))
-    {
-        return;
-    }
-    
-    CtLensDistortionRayGenerator rayGenerator;
-    rayGenerator.m_distortion = g_Constants.lensDistortion;
-    // Camera is at the origin in the view space.
-    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.5f * ASPECT_RATIO, 0.0f, 0.0f), float3(0.0f, 0.5f, 0.0f));
-
-    float2 screenUv = g_Constants.invResolution * (did + 0.5f);
-    CtRay ray = rayGenerator.generateRay(screenUv);
-    
-    float tMin = T_MAX + EPS;
-    Instance intersectionInstance;
-    ShadedVertex interpolatedAttributes;
-#if DEBUG_MODE == 1
-    uint triangleIndex = 0u;
-#elif DEBUG_MODE == 2
-    uint instanceIndex = 0u;
-#endif
+    HitInfo hitInfo;
+    hitInfo.t = T_MAX + EPS;
     
     for (uint instanceId = 0; instanceId < g_Constants.numInstances; ++instanceId)
     {
@@ -144,7 +137,7 @@ void main(in uint2 did : SV_DispatchThreadID)
                 continue;
             }
             
-            if (t > tMin)
+            if (t > hitInfo.t)
             {
                 continue;
             }
@@ -160,50 +153,128 @@ void main(in uint2 did : SV_DispatchThreadID)
             float area = a + b + c;
             float3 barycentrics = float3(a / area, b / area, c / area);
             
-            tMin = t;
-            intersectionInstance = instance;
+            hitInfo.t = t;
+            hitInfo.intersectionInstance = instance;
             // Can be done once in the end. Does that make sense?
-            interpolatedAttributes = getInterpolatedVertex(barycentrics, currentVertices.v0, currentVertices.v1, currentVertices.v2);
+            hitInfo.interpolatedAttributes = getInterpolatedVertex(barycentrics, currentVertices.v0, currentVertices.v1, currentVertices.v2);
             if (all(currentVertices.v0.getNormal()) < FLT_EPSILON)
             {
                 // Replace to the geometry normal.
-                interpolatedAttributes.normal_uvy.xyz = n;
+                hitInfo.interpolatedAttributes.normal_uvy.xyz = n;
             }
 #if DEBUG_MODE == 1
-            triangleIndex = index / 3;
+            hitInfo.triangleIndex = index / 3;
 #elif DEBUG_MODE == 2
-            instanceIndex = instanceId;
+            hitInfo.instanceIndex = instanceId;
 #endif
         }
     }
     
+    return hitInfo;
+}
+
+// Random random stateful sampler.
+uint wang_hash(uint seed)
+{
+    seed = (seed ^ 61) ^ (seed >> 16);
+    seed *= 9;
+    seed = seed ^ (seed >> 4);
+    seed *= 0x27d4eb2d;
+    seed = seed ^ (seed >> 15);
+    return seed;
+}
+
+float rand(inout uint seed)
+{
+    seed = wang_hash(seed);
+    return seed / 4294967296.0f;
+}
+
+float3 sampleHemisphere(float xi0, float xi1)
+{
+    float phi = TWO_PI * xi0;
+    float r = sqrt(xi1);
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+    float z = max(0.0f, sqrt(1.0f - r * r));
+    return float3(x, y, z);
+
+}
+
+[numthreads(8, 4, 1)]
+void main(in uint2 did : SV_DispatchThreadID)
+{
+    if (any(did >= g_Constants.resolution))
+    {
+        return;
+    }
+    
+    uint seed = did.x + did.y * g_Constants.resolution.x + g_Constants.frameIndex * (2u << 20u);
+    
+    CtLensDistortionRayGenerator rayGenerator;
+    rayGenerator.m_distortion = g_Constants.lensDistortion;
+    // Camera is at the origin in the view space.
+    rayGenerator.setup(float3(0.0f, 0.0f, 0.0f), float3(0.5f * ASPECT_RATIO, 0.0f, 0.0f), float3(0.0f, 0.5f, 0.0f));
+
+    float2 screenUv = g_Constants.invResolution * (did + 0.5f);
+    CtRay ray = rayGenerator.generateRay(screenUv);
+    
+    HitInfo primaryHitInfo = dispatchRay(ray);
+    
     // TODO add env map on miss.
-    if (tMin < T_MAX)
+    if (primaryHitInfo.t < T_MAX)
     {
         // TODO support texturing.
-        Material material = g_MaterialBuffer[intersectionInstance.material_index];
+        Material material = g_MaterialBuffer[primaryHitInfo.intersectionInstance.material_index];
         float3 albedo = material.albedo.xyz;
         float3 emissivity = material.emissivity.xyz;
         float metallicity = material.metallicity_roughness.x;
         float roughness = material.metallicity_roughness.z;
-        float3 normal = interpolatedAttributes.getNormal();
-        float2 uv = interpolatedAttributes.getUV();
+        float3 normal = primaryHitInfo.interpolatedAttributes.getNormal();
+        float2 uv = primaryHitInfo.interpolatedAttributes.getUV();
         
-        float NdotV = max(0.0f, dot(normal, -ray.d));
+        float3 radiance = emissivity;
+        float3 troughput = 1.0f;
+        troughput *= albedo;
+        // For emissive surfaces we don't shot the secondary ray.
+        // TODO fix the bug here. Something is wrong with the materials?
+        if (all(emissivity == 0.0f))
+        {
+            float3 tangent, bitangent;
+            GetOrthoVectors(normal, tangent, bitangent);
+        
+            for (uint secondaryRayIndex = 0u; secondaryRayIndex < 10u; ++secondaryRayIndex)
+            {
+                float3 secondaryRayDirection = sampleHemisphere(rand(seed), rand(seed));
+                CtRay secondaryRay;
+                // Add normal offset to avoid self intersection.
+                secondaryRay.o = ray.o + ray.d * primaryHitInfo.t + normal * 1e-2f;
+                secondaryRay.d = secondaryRayDirection.x * tangent + secondaryRayDirection.y * bitangent + secondaryRayDirection.z * normal;
+            
+                HitInfo secondaryHitInfo = dispatchRay(secondaryRay);
+                if (secondaryHitInfo.t < T_MAX)
+                {
+                    Material material = g_MaterialBuffer[secondaryHitInfo.intersectionInstance.material_index];
+                    float3 albedo = material.albedo.xyz;
+                    float3 emissivity = material.emissivity.xyz;
+                    radiance += troughput * emissivity / 10.0f;
+                }
+            }
+        }
         
         float3 result;
 #if DEBUG_MODE == 0 // Path tracing
-        result = albedo * NdotV + emissivity;
+        result = radiance;
 #elif DEBUG_MODE == 1 // Triangle index
-        result = g_IndexToColor[triangleIndex % 8];
+        result = g_IndexToColor[primaryHitInfo.triangleIndex % 8];
 #elif DEBUG_MODE == 2 // Instance index
-        result = g_IndexToColor[instanceIndex % 8];
+        result = g_IndexToColor[primaryHitInfo.instanceIndex % 8];
 #elif DEBUG_MODE == 3 // Normal
         result = normal;
 #elif DEBUG_MODE == 4 // UV
         result = float3(uv, 0.0f);
 #elif DEBUG_MODE == 5 // Depth
-        result = pow(tMin / T_MAX, 0.2f);
+        result = pow(primaryHitInfo.t / T_MAX, 0.25f);
 #endif
         g_Output[did] = float4(result, 1.0f);
 

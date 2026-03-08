@@ -6,6 +6,11 @@
 #include <gpu_shared.h>
 #include <string_view>
 
+// TODO build light structure to sample - every area light will be divided to the triangles
+// TODO implement direct illum.
+// TODO implement next event estimation
+// TODO implement restir
+
 namespace
 {
 constexpr std::string_view RT_PROGRAM_NAME             = "render_techniques/ct_ray_tracer/ct_ray_tracer";
@@ -152,6 +157,7 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
             drawConstants.resolution    = {colorTexture.getWidth(), colorTexture.getHeight()};
             drawConstants.invResolution = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
             drawConstants.lensDistortion = newOptions.lensDistortion;
+            drawConstants.frameIndex     = capsaicin.getFrameIndex();
 
             gfxBufferGetData<RtConstants>(gfx_, gpuRtConstants)[0] = drawConstants;
         }
