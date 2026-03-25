@@ -6,6 +6,8 @@
 #include <gpu_shared.h>
 #include <string_view>
 
+#define ENABLE_PIX 0
+
 // TODO build light structure to sample - every area light will be divided to the triangles
 // TODO implement direct illum.
 // TODO implement next event estimation
@@ -64,13 +66,20 @@ bool CtRayTracer::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noex
     m_shadeVerticesKernel  = gfxCreateComputeKernel(gfx_, m_shadeVerticesProgram);
 
     m_rtProgram = capsaicin.createProgram(RT_PROGRAM_NAME.data());
+#if ENABLE_PIX
+    // For some reason Pix can't handle the shader with the defines, so for such launches I have to define
+    // this stuff.
+    m_rtKernels[0] = gfxCreateComputeKernel(gfx_, m_rtProgram);
+#else
     for (uint32_t debugModeIndex = 0u; debugModeIndex < static_cast<uint32_t>(DebugMode::Count);
         ++debugModeIndex)
     {
         std::string debugModeDefine = std::format("DEBUG_MODE={}", debugModeIndex);
         const char* defines[1]      = {debugModeDefine.data()};
-        m_rtKernels[debugModeIndex] = gfxCreateComputeKernel(gfx_, m_rtProgram, nullptr, defines, 1u);
+        m_rtKernels[debugModeIndex] =
+            gfxCreateComputeKernel(gfx_, m_rtProgram, nullptr, defines, std::min(debugModeIndex, 1u));
     }
+#endif
 
     return m_shadeVerticesKernel && m_rtKernels[0];
 }
@@ -78,7 +87,8 @@ bool CtRayTracer::init([[maybe_unused]] const CapsaicinInternal& capsaicin) noex
 void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
 {
     [[maybe_unused]] const RenderOptions newOptions = convertOptions(capsaicin.getOptions());
-    uint32_t debugModeIndex = glm::clamp(newOptions.debugMode, 0u, static_cast<uint32_t>(DebugMode::Count) - 1);
+    uint32_t                             debugModeIndex =
+        glm::clamp(newOptions.debugMode, 0u, static_cast<uint32_t>(DebugMode::Count) - 1);
 
     if (!m_vertexCache)
     {
@@ -152,10 +162,10 @@ void CtRayTracer::render(CapsaicinInternal& capsaicin) noexcept
         const auto& colorTexture   = capsaicin.getSharedTexture("Color");
         const auto& gpuRtConstants = capsaicin.allocateConstantBuffer<RtConstants>(1);
         {
-            RtConstants drawConstants   = {};
-            drawConstants.numInstances  = numInstances;
-            drawConstants.resolution    = {colorTexture.getWidth(), colorTexture.getHeight()};
-            drawConstants.invResolution = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
+            RtConstants drawConstants    = {};
+            drawConstants.numInstances   = numInstances;
+            drawConstants.resolution     = {colorTexture.getWidth(), colorTexture.getHeight()};
+            drawConstants.invResolution  = 1.0f / static_cast<glm::vec2>(drawConstants.resolution);
             drawConstants.lensDistortion = newOptions.lensDistortion;
             drawConstants.frameIndex     = capsaicin.getFrameIndex();
 
