@@ -1,5 +1,7 @@
 #include "renderer.h"
+#include "auto_exposure/auto_exposure.h"
 #include "ct_ray_tracer/ct_ray_tracer.h"
+#include "tone_mapping/tone_mapping.h"
 
 namespace Capsaicin
 {
@@ -25,6 +27,8 @@ public:
     {
         std::vector<std::unique_ptr<RenderTechnique>> render_techniques;
         render_techniques.emplace_back(std::make_unique<CtRayTracer>());
+        render_techniques.emplace_back(std::make_unique<AutoExposure>());
+        render_techniques.emplace_back(std::make_unique<ToneMapping>());
         return render_techniques;
     }
 };

@@ -26,7 +26,7 @@ struct TriangleVertices
 struct HitInfo
 {
     float t;
-    Instance intersectionInstance;
+    uint material_index;
     ShadedVertex interpolatedAttributes;
 #if DEBUG_MODE == 1
     uint triangleIndex;
@@ -39,6 +39,9 @@ static const float T_MIN = 0.01f;
 static const float T_MAX = 1000.0f;
 static const float EPS = 1e-5f;
 static const float ASPECT_RATIO = 16.0f / 9.0f;
+static const uint SPP = 3u;
+static const float INV_SPP = 1.0f / SPP;
+static const uint NUM_BOUNCES = 4u;
 
 static const float3 g_IndexToColor[8] =
 {
@@ -51,31 +54,6 @@ static const float3 g_IndexToColor[8] =
     float3(1.0, 0.5, 0.0), // 6 - Orange
     float3(0.5, 0.0, 1.0), // 7 - Purple
 };
-
-// TODO make sort of a library with that.
-float3 getBarycentrics(CtRay ray, float3 v0, float3 v1, float3 v2)
-{
-    // Möller–Trumbore intersection algorithm.
-    // https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm
-    float3 edge10 = v1 - v0;
-    float3 edge20 = v2 - v0;
-
-    float3 DcrossE20 = cross(ray.d, edge20);
-    float det = dot(DcrossE20, edge10);
-    if (abs(det) < FLT_EPSILON)
-    {
-        return 0.0f; // Almost parallel.
-    }
-
-    float invDet = rcp(det);
-    float3 s = ray.o - v0;
-    float u = invDet * dot(s, DcrossE20);
-
-    float3 ScrossE10 = cross(s, edge10);
-    float v = invDet * dot(ray.d, ScrossE10);
-
-    return float3(1.0f - u - v, u, v);
-}
 
 float3 interpolate(float3 barycentrics, float3 value0, float3 value1, float3 value2)
 {
@@ -124,8 +102,6 @@ HitInfo dispatchRay(CtRay ray)
             float3 e2 = v0 - v2;
             float3 n = normalize(cross(e0, -e2));
 
-            // TODO support Moller Trombone algorithm to calculate baricentric coordinates to allow for vertices blenging and texturing.
-            // Find the ray plane intersection.
             float NdotRD = dot(n, ray.d);
             if (abs(NdotRD) < FLT_EPSILON)
             {
@@ -154,13 +130,13 @@ HitInfo dispatchRay(CtRay ray)
             float3 barycentrics = float3(a / area, b / area, c / area);
             
             hitInfo.t = t;
-            hitInfo.intersectionInstance = instance;
+            hitInfo.material_index = instance.material_index;
             // Can be done once in the end. Does that make sense?
             hitInfo.interpolatedAttributes = getInterpolatedVertex(barycentrics, currentVertices.v0, currentVertices.v1, currentVertices.v2);
             if (all(currentVertices.v0.getNormal()) < FLT_EPSILON)
             {
                 // Replace to the geometry normal.
-                hitInfo.interpolatedAttributes.normal_uvy.xyz = n;
+                hitInfo.interpolatedAttributes.normal_uvy.xyz = -sign(dot(n, ray.d)) * n;
             }
 #if DEBUG_MODE == 1
             hitInfo.triangleIndex = index / 3;
@@ -225,7 +201,7 @@ void main(in uint2 did : SV_DispatchThreadID)
     if (primaryHitInfo.t < T_MAX)
     {
         // TODO support texturing.
-        Material material = g_MaterialBuffer[primaryHitInfo.intersectionInstance.material_index];
+        Material material = g_MaterialBuffer[primaryHitInfo.material_index];
         float3 albedo = material.albedo.xyz;
         float3 emissivity = material.emissivity.xyz;
         float metallicity = material.metallicity_roughness.x;
@@ -237,29 +213,54 @@ void main(in uint2 did : SV_DispatchThreadID)
         float3 troughput = 1.0f;
         troughput *= albedo;
         // For emissive surfaces we don't shot the secondary ray.
-        // TODO fix the bug here. Something is wrong with the materials?
         if (all(emissivity == 0.0f))
         {
             float3 tangent, bitangent;
             GetOrthoVectors(normal, tangent, bitangent);
         
-            for (uint secondaryRayIndex = 0u; secondaryRayIndex < 10u; ++secondaryRayIndex)
+            for (uint secondaryRayIndex = 0u; secondaryRayIndex < SPP; ++secondaryRayIndex)
             {
                 float3 secondaryRayDirection = sampleHemisphere(rand(seed), rand(seed));
                 CtRay secondaryRay;
                 // Add normal offset to avoid self intersection.
                 secondaryRay.o = ray.o + ray.d * primaryHitInfo.t + normal * 1e-2f;
                 secondaryRay.d = secondaryRayDirection.x * tangent + secondaryRayDirection.y * bitangent + secondaryRayDirection.z * normal;
-            
-                HitInfo secondaryHitInfo = dispatchRay(secondaryRay);
-                if (secondaryHitInfo.t < T_MAX)
+                
+                float3 bounceThroughput = troughput;
+                for (uint bounceIndex = 0u; bounceIndex < NUM_BOUNCES; ++bounceIndex)
                 {
-                    Material material = g_MaterialBuffer[secondaryHitInfo.intersectionInstance.material_index];
-                    float3 albedo = material.albedo.xyz;
-                    float3 emissivity = material.emissivity.xyz;
-                    radiance += troughput * emissivity / 10.0f;
+                    HitInfo secondaryHitInfo = dispatchRay(secondaryRay);
+                    if (secondaryHitInfo.t < T_MAX)
+                    {
+                        Material material = g_MaterialBuffer[secondaryHitInfo.material_index];
+                        float3 albedo = material.albedo.xyz;
+                        float3 emissivity = material.emissivity.xyz;
+                        radiance += bounceThroughput * emissivity;
+                        bounceThroughput *= albedo;
+                        
+                        if (any(emissivity > 0.0f))
+                        {
+                            break;
+                        }
+                        
+                        float3 newNormal, newTangent, newBitangent;
+                        newNormal = secondaryHitInfo.interpolatedAttributes.getNormal();
+                        GetOrthoVectors(newNormal, newTangent, newBitangent);
+                        float3 newRayDirection = sampleHemisphere(rand(seed), rand(seed));
+                        
+                        CtRay bounceRay;
+                        bounceRay.o = secondaryRay.o + secondaryRay.d * secondaryHitInfo.t + newNormal * 1e-2f;
+                        bounceRay.d = newRayDirection.x * newTangent + newRayDirection.y * newBitangent + newRayDirection.z * newNormal;
+                        secondaryRay = bounceRay;
+                    }
+                    else
+                    {
+                        // Apparently we're out of the scene.
+                        break;
+                    }
                 }
             }
+            radiance *= INV_SPP;
         }
         
         float3 result;
